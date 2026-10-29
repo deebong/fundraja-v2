@@ -72,7 +72,8 @@ function doGet(e) {
 
     return response({ error: 'Unknown operation' });
   } catch (err) {
-    return response({ error: String(err) });
+    console.error('FundRaja GET failure', err);
+    return response({ error: 'Request could not be completed.' });
   }
 }
 
@@ -289,7 +290,8 @@ function doPost(e) {
 
     return response({ error: 'Unknown action' });
   } catch (err) {
-    return response({ error: String(err && err.message ? err.message : err) });
+    console.error('FundRaja POST failure', err);
+    return response({ error: 'Request could not be completed.' });
   }
 }
 
