@@ -1274,7 +1274,7 @@
                     action:'verify_email_code', userId:session.userId, sessionToken:session.sessionToken, email:email, code:code
                 })}).then(r=>r.json());
                 status.innerText = res.message || res.error || 'Unable to verify email.';
-                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); }
+                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); renderProfileDataToContainer(currentProfileData, 'appProf'); }
                 else alert(res.error || 'Email verification failed.');
             } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
         }
@@ -1317,6 +1317,8 @@
 
         function openDonateModalFromDetails() {
             if(!session) return openLogin();
+            const remainingAmount = Math.max(0, (Number(currentDetails.target_amount) || 0) - (Number(currentDetails.raised_amount) || 0));
+            if (remainingAmount <= 0) return alert('This campaign has reached its target.');
             document.getElementById('dTitle').innerText = currentDetails.title;
             document.getElementById('dName').value = session.name;
             const target = Math.max(0, Number(currentDetails.target_amount) || 0);
