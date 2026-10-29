@@ -1220,13 +1220,17 @@
         }
 
         async function pairPaymentDetector() {
+            // Repeated taps while a QR is open must not mint/revoke extra tokens.
+            if (document.getElementById('detectorPairingQrModal')) return;
+            if (window.detectorPairingRequestInProgress) return;
             if(!session || !session.userId) return openLogin();
             const recipientUpi = (document.getElementById('detectorUpiInput')?.value || '').trim();
             if(!recipientUpi) return alert('Enter the recipient UPI ID used by one of your campaigns.');
             if(!confirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.')) return;
             const btn = document.querySelector('button[onclick="pairPaymentDetector()"]');
             const oldText = btn ? btn.innerText : '';
-            if(btn) { btn.disabled = true; btn.innerText = 'Creating token...'; }
+            window.detectorPairingRequestInProgress = true;
+            if(btn) { btn.disabled = true; btn.innerText = 'Creating QR...'; }
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'pair_detector', userId:session.userId, sessionToken:session.sessionToken, recipientUpi }) }).then(r=>r.json());
                 if(res.status !== 'success') return alert(res.error || 'Could not pair detector.');
@@ -1239,7 +1243,10 @@
                 });
                 loadDetectorStatus();
             } catch(e) { alert('Network error while creating pairing token.'); }
-            finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
+            finally {
+                window.detectorPairingRequestInProgress = false;
+                if(btn) { btn.disabled = false; btn.innerText = oldText; }
+            }
         }
 
         function showDetectorPairingQr(payload) {
