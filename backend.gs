@@ -1,6 +1,8 @@
-function authorizeFundRajaEmail() {
-  // Run once manually in Apps Script as the deployment owner to trigger Google consent.
-  return MailApp.getRemainingDailyQuota();
+function authorizeFundRajaServices() {
+  // Run once manually in Apps Script as the deployment owner to authorize email and Drive access.
+  const remainingEmailQuota = MailApp.getRemainingDailyQuota();
+  getFundRajaImageFolder_();
+  return { emailQuota: remainingEmailQuota, driveReady: true };
 }
 function getFundRajaImageFolder_() {
   if (DRIVE_FOLDER_ID) return DriveApp.getFolderById(DRIVE_FOLDER_ID);
