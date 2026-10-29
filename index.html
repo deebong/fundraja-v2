@@ -1273,7 +1273,14 @@
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'get_detector_status', userId:session.userId, sessionToken:session.sessionToken }) }).then(r=>r.json());
                 if(res.status !== 'success') { el.innerText = res.error || 'Unable to load detector status.'; return; }
                 if(!res.devices.length) { el.innerText = 'No active detector paired. Pair the Android app to enable notification event reporting.'; return; }
-                el.innerText = res.devices.map(d => 'Active device ' + d.deviceId + ' for ' + d.recipientUpi + (d.lastSeenAt ? ' · last event ' + new Date(d.lastSeenAt).toLocaleString() : ' · waiting for first event')).join(' | ');
+                el.innerText = res.devices.map(d => {
+                    const lastContact = d.lastSeenAt ? new Date(d.lastSeenAt) : null;
+                    const recentlyConnected = lastContact && Number.isFinite(lastContact.getTime()) && (Date.now() - lastContact.getTime()) <= 5 * 60 * 1000;
+                    const deviceName = String(d.deviceName || '').trim();
+                    const heading = (deviceName || 'Android device') + ' — ' + (recentlyConnected ? 'connected' : (lastContact ? 'not recently connected' : 'not yet connected'));
+                    const activity = d.lastEventAt ? 'last event ' + new Date(d.lastEventAt).toLocaleString() : 'waiting for first event';
+                    return heading + ' (Active device ' + d.deviceId + ' for ' + d.recipientUpi + ' · ' + activity + ')';
+                }).join(' | ');
             } catch(e) { el.innerText = 'Could not load detector status.'; }
         }
 
