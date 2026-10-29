@@ -629,7 +629,7 @@
                 <h2 style="text-align:center; margin-bottom:10px;">Start Fundraising</h2>
                 <input type="text" id="cHp" style="display:none"> <div class="form-group"><label class="form-label">Category</label><select id="cCat" class="form-input"><option>Medical</option><option>Education</option><option>Startups</option><option>Creative</option><option>Sports</option><option>Pets</option><option>Emergency</option></select></div>
                 <div class="form-group"><label class="form-label">Title</label><input type="text" id="cTitle" class="form-input" maxlength="100"></div>
-                <div class="form-group"><label class="form-label">Story</label><textarea id="cDesc" class="form-input" rows="3"></textarea></div>
+                <div class="form-group"><label class="form-label">Story</label><textarea id="cDesc" class="form-input" rows="3"></textarea></div>\n                <div class="form-group"><label class="form-label">Campaign image (Optional)</label><input type="file" id="cImage" class="form-input" accept="image/png,image/jpeg,image/webp"><small style="color:var(--text-gray);">PNG, JPG or WebP. Use a small image.</small></div>
                 <div style="display:flex; gap:12px;">
                     <div class="form-group" style="flex:1"><label class="form-label">Target (₹)</label><input type="number" id="cTarget" class="form-input"></div>
                     <div class="form-group" style="flex:1"><label class="form-label">End Date</label><input type="date" id="cDate" class="form-input"></div>
@@ -648,7 +648,12 @@
             <div class="modal-scroll-area">
                 <h2 style="text-align:center; margin-bottom:10px;">Edit Profile</h2>
                 
-                <div class="form-group"><label class="form-label">Email (Optional)</label><input type="email" id="eEmail" class="form-input"></div>
+                <div class="form-group">
+                    <label class="form-label">Gmail (Optional)</label><input type="email" id="eEmail" class="form-input" placeholder="you@gmail.com">
+                    <div id="emailVerificationStatus" style="font-size:.85rem;color:var(--text-gray);margin-top:6px;">Email is not verified.</div>
+                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn btn-outline" type="button" onclick="sendEmailVerificationCode()">Send verification code</button><input id="eEmailCode" class="form-input" inputmode="numeric" maxlength="6" placeholder="6-digit code" style="max-width:150px;"><button class="btn btn-outline" type="button" onclick="verifyEmailCode()">Verify</button></div>
+                </div>
+                <div class="form-group"><label class="form-label">Profile photo</label><input type="file" id="eProfilePhoto" class="form-input" accept="image/png,image/jpeg,image/webp"><small style="color:var(--text-gray);">PNG, JPG or WebP. Use a small image.</small></div>
                 <div class="form-group"><label class="form-label">About Me</label><textarea id="eAbout" class="form-input" rows="3"></textarea></div>
                 
                 <label class="form-label" style="margin-top:10px;">Social Links</label>
@@ -676,7 +681,7 @@
                 
                 <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
                     <div id="qrContainer" style="background:white; padding:10px; border:1px solid var(--border); border-radius:12px; display:inline-block;"><img id="qrImage" src="" width="160" height="160" style="display:block;"></div>
-                    <input type="number" id="dAmount" value="500" class="form-input" style="text-align:center; font-size:1.5rem; width:160px; font-weight:700;" onchange="updateQR()">
+                    <input type="number" id="dAmount" value="" class="form-input" style="text-align:center; font-size:1.5rem; width:160px; font-weight:700;" onchange="updateQR()">
                 </div>
                 
                 <a id="upiLink" href="#" class="btn btn-primary" style="width:100%; display:none; margin-top:10px;">Open Payment App</a>
@@ -977,14 +982,24 @@
                             <summary style="cursor:pointer;font-weight:700;">USB installation instructions (requires a computer)</summary>
                             <ol style="padding-left:22px;margin-top:10px;color:var(--text-gray);font-size:.92rem;display:grid;gap:8px;">
                                 <li>Download the official OpenUPI Watch APK to your computer when the download becomes available.</li>
-                                <li>Install Android Platform Tools (ADB) from Google's official Android developer website.</li>
+                                <li>Install <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener noreferrer">Android SDK Platform-Tools (ADB) from Google</a>.</li>
                                 <li>On your phone, open Settings → About phone and tap Build number seven times to enable Developer options.</li>
                                 <li>Open Developer options and enable USB debugging. Connect the phone to your own trusted computer using a data-capable USB cable.</li>
                                 <li>Approve the USB debugging prompt on your phone. In the computer terminal, run <code>adb devices</code> and confirm the phone is listed as <code>device</code>.</li>
-                                <li>In the folder containing the APK, run <code>adb install -r openupi-watch.apk</code>.</li>
+                                <li>In the folder containing the APK, run the install command below.</li>
                                 <li>If Android or Play Protect blocks the installation, do not disable protection to force it. Stop and use an approved distribution method.</li>
                                 <li>After installation, disable USB debugging and revoke debugging authorisations if appropriate.</li>
                             </ol>
+                            <div style="display:grid;gap:10px;margin-top:12px;">
+                                <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F1F5F9;padding:8px 10px;"><strong style="font-size:.88rem;">Check connected phone</strong><button class="btn btn-outline" type="button" style="padding:5px 10px;font-size:.82rem;" onclick="copyCommand('adb devices',this)">Copy command</button></div>
+                                    <code style="display:block;padding:12px;background:#0F172A;color:#E2E8F0;white-space:pre-wrap;overflow-wrap:anywhere;">adb devices</code>
+                                </div>
+                                <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F1F5F9;padding:8px 10px;"><strong style="font-size:.88rem;">Install / update APK</strong><button class="btn btn-outline" type="button" style="padding:5px 10px;font-size:.82rem;" onclick="copyCommand('adb install -r openupi-watch.apk',this)">Copy command</button></div>
+                                    <code style="display:block;padding:12px;background:#0F172A;color:#E2E8F0;white-space:pre-wrap;overflow-wrap:anywhere;">adb install -r openupi-watch.apk</code>
+                                </div>
+                            </div>
                             <p style="margin-top:10px;color:var(--text-gray);font-size:.88rem;">Most creators will need a simpler direct phone download. This temporary guide is for testing only; the APK download will be enabled once a suitable distribution link is published.</p>
                         </details>
                     </div>
@@ -1040,7 +1055,7 @@
             if(aboutEl) aboutEl.innerText = data.about || 'No bio added.';
             
             let badges = '';
-            if(data.email) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Google</span>`;
+            if(data.email && data.email_verified) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Email verified</span>`;
             if(data.phone) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Phone</span>`;
             if(badgesEl) badgesEl.innerHTML = badges;
 
@@ -1098,6 +1113,7 @@
             if(camp.end_date) { const d = new Date(camp.end_date); if(!isNaN(d)) dateStr = d.toDateString(); }
             document.getElementById('detEnd').innerText = dateStr;
 
+            document.getElementById('profileView').classList.add('hidden');
             document.getElementById('detailsView').classList.remove('hidden');
             window.location.hash = camp.id;
         }
@@ -1105,6 +1121,22 @@
         function closeDetails() {
             document.getElementById('detailsView').classList.add('hidden');
             history.pushState("", document.title, window.location.pathname + window.location.search);
+        }
+
+        async function copyCommand(command, button) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(command);
+                else {
+                    const field = document.createElement('textarea');
+                    field.value = command;
+                    field.style.position = 'fixed'; field.style.opacity = '0';
+                    document.body.appendChild(field); field.select();
+                    const ok = document.execCommand('copy'); field.remove();
+                    if (!ok) throw new Error('Copy unavailable');
+                }
+                const previous = button.innerText; button.innerText = 'Copied';
+                setTimeout(() => button.innerText = previous, 1400);
+            } catch (e) { alert('Could not copy automatically. Select and copy the command manually.'); }
         }
 
         // --- MODAL UTILS ---
@@ -1166,6 +1198,7 @@
             if(currentProfileData) {
                 document.getElementById('eAbout').value = currentProfileData.about || '';
                 document.getElementById('eEmail').value = currentProfileData.email || '';
+                document.getElementById('emailVerificationStatus').innerText = currentProfileData.email_verified ? 'Email verified' : 'Email is not verified.';
             }
         }
 
@@ -1196,6 +1229,11 @@
             if(!session) return openLogin();
             document.getElementById('dTitle').innerText = currentDetails.title;
             document.getElementById('dName').value = session.name;
+            const target = Math.max(0, Number(currentDetails.target_amount) || 0);
+            const raised = Math.max(0, Number(currentDetails.raised_amount) || 0);
+            const remaining = Math.max(0, target - raised);
+            const suggested = Math.min(remaining, Math.max(100, Math.round((target * 0.05) / 100) * 100));
+            document.getElementById('dAmount').value = String(suggested || remaining || 100);
             document.getElementById('donateModal').style.display = 'flex';
             updateQR();
         }
