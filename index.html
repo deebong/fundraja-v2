@@ -841,8 +841,8 @@
                 div.onclick = () => showDetails(camp);
                 
                 div.innerHTML = `
-                    <div class="c-img" style="background:${colorVar}">
-                        ${camp.title ? escapeHtml(camp.title.substring(0,2).toUpperCase()) : '??'}
+                    <div class="c-img" style="background:${colorVar};${camp.image_url ? 'background-image:url(' + String(camp.image_url).replace(/'/g, '%27') + ');background-size:cover;background-position:center;' : ''}">
+                        ${camp.image_url ? '' : (camp.title ? escapeHtml(camp.title.substring(0,2).toUpperCase()) : '??')}
                         ${statusBadge}
                     </div>
                     <div class="c-body">
@@ -1048,6 +1048,11 @@
 
         function renderProfileDataToContainer(data, prefix) {
             if(!data) return;
+            const avatarEl = prefix === 'prof' ? document.getElementById('profAvatar') : null;
+            if (avatarEl) {
+                if (data.photo_url) { avatarEl.style.backgroundImage = 'url("' + String(data.photo_url).replace(/"/g, '%22') + '")'; avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center'; avatarEl.textContent = ''; }
+                else { avatarEl.style.backgroundImage = 'none'; avatarEl.textContent = (data.name || 'U').charAt(0).toUpperCase(); }
+            }
             const aboutEl = document.getElementById(prefix + 'About');
             const badgesEl = document.getElementById(prefix + 'Badges');
             const socialsEl = document.getElementById(prefix + 'Socials');
@@ -1094,7 +1099,10 @@
             const colorVar = catMap[camp.category] || 'var(--primary)';
 
             document.getElementById('detHero').style.background = colorVar;
-            document.getElementById('detHero').innerText = camp.title.substring(0,2).toUpperCase();
+            document.getElementById('detHero').style.backgroundImage = camp.image_url ? 'url("' + String(camp.image_url).replace(/"/g, '%22') + '")' : 'none';
+            document.getElementById('detHero').style.backgroundSize = 'cover';
+            document.getElementById('detHero').style.backgroundPosition = 'center';
+            document.getElementById('detHero').innerText = camp.image_url ? '' : camp.title.substring(0,2).toUpperCase();
             document.getElementById('detBadge').innerText = camp.category;
             document.getElementById('detBadge').style.background = colorVar;
             document.getElementById('detBadge').style.color = 'white';
@@ -1164,15 +1172,19 @@
             document.getElementById('captchaQ').innerText = `${n1} + ${n2} = ?`;
         }
 
-        function submitCampaign() {
+        async function submitCampaign() {
             if(parseInt(document.getElementById('cCaptcha').value) !== captchaAnswer) return alert('Math Check Failed');
             if(document.getElementById('cHp').value) return; 
             
             const btn = document.querySelector('#createModal .btn-primary');
             btn.innerText = "Launching...";
             
+            let imageUrl = '';
+            try { imageUrl = await uploadImageFile('cImage', 'campaign'); }
+            catch (e) { btn.innerText = 'Launch Campaign'; alert(e.message || 'Could not upload campaign image.'); return; }
             const data = {
                 action: 'createCampaign',
+                imageUrl:imageUrl,
                 category: document.getElementById('cCat').value,
                 title: document.getElementById('cTitle').value,
                 desc: document.getElementById('cDesc').value,
@@ -1193,6 +1205,59 @@
             });
         }
 
+        function readImageAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) return resolve('');
+                if (!/^image\/(png|jpeg|webp)$/i.test(file.type)) return reject(new Error('Choose a PNG, JPG or WebP image.'));
+                if (file.size > 3 * 1024 * 1024) return reject(new Error('Please choose an image under 3 MB.'));
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Could not read the selected image.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadImageFile(inputId, purpose) {
+            const input = document.getElementById(inputId);
+            if (!input || !input.files || !input.files[0]) return '';
+            const image = await readImageAsDataUrl(input.files[0]);
+            const result = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                action:'upload_image', userId:session.userId, sessionToken:session.sessionToken, purpose:purpose, image:image
+            })}).then(r=>r.json());
+            if (result.status !== 'success' || !result.url) throw new Error(result.error || 'Image upload failed.');
+            return result.url;
+        }
+
+        async function sendEmailVerificationCode() {
+            const email = document.getElementById('eEmail').value.trim().toLowerCase();
+            const status = document.getElementById('emailVerificationStatus');
+            if (!/^[^\s@]+@gmail\.com$/i.test(email)) { alert('Enter a valid Gmail address first.'); return; }
+            status.innerText = 'Sending verification code…';
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'send_email_verification', userId:session.userId, sessionToken:session.sessionToken, email:email
+                })}).then(r=>r.json());
+                status.innerText = res.message || res.error || 'Unable to send code.';
+                if (res.status !== 'success') alert(res.error || 'Unable to send verification code.');
+            } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
+        }
+
+        async function verifyEmailCode() {
+            const email = document.getElementById('eEmail').value.trim().toLowerCase();
+            const code = document.getElementById('eEmailCode').value.trim();
+            const status = document.getElementById('emailVerificationStatus');
+            if (!/^\d{6}$/.test(code)) { alert('Enter the 6-digit code sent to your Gmail.'); return; }
+            status.innerText = 'Verifying…';
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'verify_email_code', userId:session.userId, sessionToken:session.sessionToken, email:email, code:code
+                })}).then(r=>r.json());
+                status.innerText = res.message || res.error || 'Unable to verify email.';
+                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); }
+                else alert(res.error || 'Email verification failed.');
+            } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
+        }
+
         function openEditProfile() {
             document.getElementById('editProfileModal').style.display = 'flex';
             if(currentProfileData) {
@@ -1202,9 +1267,13 @@
             }
         }
 
-        function handleUpdateProfile() {
+        async function handleUpdateProfile() {
+            let photoUrl = '';
+            try { photoUrl = await uploadImageFile('eProfilePhoto', 'profile'); }
+            catch (e) { alert(e.message || 'Could not upload profile photo.'); return; }
             const payload = {
-                action: 'update_profile', userId: session.userId,
+                action: 'update_profile', userId: session.userId, sessionToken: session.sessionToken,
+                photoUrl: photoUrl || undefined,
                 about: document.getElementById('eAbout').value,
                 email: document.getElementById('eEmail').value,
                 phone: document.getElementById('ePhone').value,
@@ -1374,7 +1443,7 @@
                     return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>${escapeHtml(d.donor || 'Donor')}</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">UTR ${escapeHtml(d.utr || 'not provided')} · <span style="color:${d.credited ? '#047857' : '#B45309'};font-weight:700;">${d.credited ? 'PAID' : 'PENDING VERIFICATION'}</span></span></span>
-                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><i class="ph ph-caret-down" aria-hidden="true" style="font-size:1.1rem;color:var(--text-gray);transition:transform .15s;"></i></span>
                         </summary>
                         <div style="padding:0 0 14px;">
                             <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
