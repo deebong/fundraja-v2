@@ -258,15 +258,10 @@ function pairDetector_(ss, data) {
   const rawToken = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
   const deviceId = 'DEV-' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase();
   const now = new Date();
-  // Disable older devices for this creator/UPI to make pairing/re-pairing predictable.
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][1]) === userId && String(rows[i][6] || '').toLowerCase() === recipientUpi && String(rows[i][4] || '') === '' && String(rows[i][7]).toUpperCase() === 'TRUE') {
-      sheet.getRange(i + 1, 5).setValue(now);
-      sheet.getRange(i + 1, 8).setValue(false);
-    }
-  }
+  // Create a pending pairing without revoking the working device. The previous
+  // device is replaced only after this new token successfully pings the backend.
   sheet.appendRow([deviceId, userId, sha256_(rawToken), now, '', '', recipientUpi, true]);
-  return response({ status: 'success', deviceId: deviceId, token: rawToken, recipientUpi: recipientUpi, message: 'Copy this token into OpenUPI Watch. It is shown only once.' });
+  return response({ status: 'success', deviceId: deviceId, token: rawToken, recipientUpi: recipientUpi, message: 'Pairing QR created. The device becomes active after it connects.' });
 }
 
 function revokeDetector_(ss, data) {
@@ -324,9 +319,24 @@ function detectorPing_(ss, data) {
       return response({ error: 'Recipient UPI does not match this paired device' });
     }
     const rowNumber = i + 1;
+    const ownerId = String(getByHeader_(row, map, 'user_id') || '');
+    const deviceId = String(getByHeader_(row, map, 'device_id') || '');
+    // A new phone only replaces previous pairings after it has proved possession
+    // of the token by successfully pinging. Repeated pings are idempotent.
+    for (let j = 1; j < rows.length; j++) {
+      if (j === i) continue;
+      const other = rows[j];
+      if (String(getByHeader_(other, map, 'user_id') || '') === ownerId &&
+          String(getByHeader_(other, map, 'recipient_upi') || '').trim().toLowerCase() === recipientUpi &&
+          String(getByHeader_(other, map, 'enabled')).toUpperCase() === 'TRUE' &&
+          !getByHeader_(other, map, 'revoked_at')) {
+        sheet.getRange(j + 1, map.revoked_at + 1).setValue(new Date());
+        sheet.getRange(j + 1, map.enabled + 1).setValue(false);
+      }
+    }
     sheet.getRange(rowNumber, map.last_seen_at + 1).setValue(new Date());
     sheet.getRange(rowNumber, map.device_name + 1).setValue(deviceName);
-    return response({ status: 'success', deviceId: getByHeader_(row, map, 'device_id'), deviceName: deviceName, checkedAt: new Date() });
+    return response({ status: 'success', deviceId: deviceId, deviceName: deviceName, checkedAt: new Date() });
   }
   return response({ error: 'Invalid or revoked detector token' });
 }

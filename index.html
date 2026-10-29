@@ -577,7 +577,7 @@
             </div>
 
             <h3 style="margin-bottom:1.2rem; font-size:1.4rem;">Active Campaigns</h3>
-            <div class="dashboard-grid" id="profileCampaignsGrid"></div>
+            <div class="campaign-grid" id="profileCampaignsGrid"></div>
         </div>
     </div>
 
@@ -969,6 +969,25 @@
                         </div>
                         <p id="detectorStatusText" style="color:var(--text-gray); margin-top:12px;">Detector not checked yet.</p>
                     </div>
+                    <div style="background:white;padding:24px;border-radius:16px;border:1px solid var(--border);margin-bottom:24px;">
+                        <h3 style="margin-bottom:6px;">OpenUPI Watch for Android</h3>
+                        <p style="color:var(--text-gray);margin-bottom:14px;">Optional: connect an Android phone to report supported UPI payment notifications. You must still verify each payment in your UPI app or bank record.</p>
+                        <button class="btn btn-outline" type="button" disabled title="APK distribution is being prepared">APK download — not available yet</button>
+                        <details style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+                            <summary style="cursor:pointer;font-weight:700;">USB installation instructions (requires a computer)</summary>
+                            <ol style="padding-left:22px;margin-top:10px;color:var(--text-gray);font-size:.92rem;display:grid;gap:8px;">
+                                <li>Download the official OpenUPI Watch APK to your computer when the download becomes available.</li>
+                                <li>Install Android Platform Tools (ADB) from Google's official Android developer website.</li>
+                                <li>On your phone, open Settings → About phone and tap Build number seven times to enable Developer options.</li>
+                                <li>Open Developer options and enable USB debugging. Connect the phone to your own trusted computer using a data-capable USB cable.</li>
+                                <li>Approve the USB debugging prompt on your phone. In the computer terminal, run <code>adb devices</code> and confirm the phone is listed as <code>device</code>.</li>
+                                <li>In the folder containing the APK, run <code>adb install -r openupi-watch.apk</code>.</li>
+                                <li>If Android or Play Protect blocks the installation, do not disable protection to force it. Stop and use an approved distribution method.</li>
+                                <li>After installation, disable USB debugging and revoke debugging authorisations if appropriate.</li>
+                            </ol>
+                            <p style="margin-top:10px;color:var(--text-gray);font-size:.88rem;">Most creators will need a simpler direct phone download. This temporary guide is for testing only; the APK download will be enabled once a suitable distribution link is published.</p>
+                        </details>
+                    </div>
                     <div style="background:white; padding:24px; border-radius:16px; border:1px solid var(--border); margin-bottom:24px;">
                         <h3 style="margin-bottom:6px;">My Donations & Payment Progress</h3>
                         <p style="color:var(--text-gray); margin-bottom:14px;">Track your submitted donation claims. OpenUPI Watch is optional; the creator must verify receipt before a donation is marked PAID.</p>
@@ -1220,13 +1239,17 @@
         }
 
         async function pairPaymentDetector() {
+            // Repeated taps while a QR is open must not mint/revoke extra tokens.
+            if (document.getElementById('detectorPairingQrModal')) return;
+            if (window.detectorPairingRequestInProgress) return;
             if(!session || !session.userId) return openLogin();
             const recipientUpi = (document.getElementById('detectorUpiInput')?.value || '').trim();
             if(!recipientUpi) return alert('Enter the recipient UPI ID used by one of your campaigns.');
-            if(!confirm('Create a new detector pairing token for ' + recipientUpi + '? Any active pairing for this same UPI ID will be revoked.')) return;
+            if(!confirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.')) return;
             const btn = document.querySelector('button[onclick="pairPaymentDetector()"]');
             const oldText = btn ? btn.innerText : '';
-            if(btn) { btn.disabled = true; btn.innerText = 'Creating token...'; }
+            window.detectorPairingRequestInProgress = true;
+            if(btn) { btn.disabled = true; btn.innerText = 'Creating QR...'; }
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'pair_detector', userId:session.userId, sessionToken:session.sessionToken, recipientUpi }) }).then(r=>r.json());
                 if(res.status !== 'success') return alert(res.error || 'Could not pair detector.');
@@ -1239,7 +1262,10 @@
                 });
                 loadDetectorStatus();
             } catch(e) { alert('Network error while creating pairing token.'); }
-            finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
+            finally {
+                window.detectorPairingRequestInProgress = false;
+                if(btn) { btn.disabled = false; btn.innerText = oldText; }
+            }
         }
 
         function showDetectorPairingQr(payload) {
@@ -1272,15 +1298,25 @@
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'get_detector_status', userId:session.userId, sessionToken:session.sessionToken }) }).then(r=>r.json());
                 if(res.status !== 'success') { el.innerText = res.error || 'Unable to load detector status.'; return; }
-                if(!res.devices.length) { el.innerText = 'No active detector paired. Pair the Android app to enable notification event reporting.'; return; }
-                el.innerText = res.devices.map(d => {
+                const now = Date.now();
+                const visibleDevices = res.devices.filter(d => {
+                    if (d.lastSeenAt) return true;
+                    const created = d.createdAt ? new Date(d.createdAt).getTime() : 0;
+                    return created > 0 && now - created <= 15 * 60 * 1000;
+                });
+                if(!visibleDevices.length) { el.innerText = 'No registered phone is currently connected. Pair OpenUPI Watch to register a device.'; return; }
+                el.innerHTML = visibleDevices.map(d => {
                     const lastContact = d.lastSeenAt ? new Date(d.lastSeenAt) : null;
-                    const recentlyConnected = lastContact && Number.isFinite(lastContact.getTime()) && (Date.now() - lastContact.getTime()) <= 5 * 60 * 1000;
+                    const recentlyConnected = lastContact && Number.isFinite(lastContact.getTime()) && (now - lastContact.getTime()) <= 5 * 60 * 1000;
                     const deviceName = String(d.deviceName || '').trim();
-                    const heading = (deviceName || 'Android device') + ' — ' + (recentlyConnected ? 'connected' : (lastContact ? 'not recently connected' : 'not yet connected'));
-                    const activity = d.lastEventAt ? 'last event ' + new Date(d.lastEventAt).toLocaleString() : 'waiting for first event';
-                    return heading + ' (Active device ' + d.deviceId + ' for ' + d.recipientUpi + ' · ' + activity + ')';
-                }).join(' | ');
+                    const pending = !lastContact;
+                    const heading = pending ? 'Pairing QR created — waiting for phone to scan' :
+                        (deviceName || 'Android phone') + ' — ' + (recentlyConnected ? 'connected recently' : 'not recently connected');
+                    const activity = d.lastEventAt ? 'Last notification: ' + new Date(d.lastEventAt).toLocaleString() : (pending ? 'Not registered yet' : 'No payment notification detected yet');
+                    return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">' +
+                        '<strong>' + escapeHtml(heading) + '</strong><div style="color:var(--text-gray);font-size:.9rem;margin-top:4px;">UPI: ' +
+                        escapeHtml(d.recipientUpi || '') + ' · ' + escapeHtml(activity) + '</div></div>';
+                }).join('');
             } catch(e) { el.innerText = 'Could not load detector status.'; }
         }
 
@@ -1297,19 +1333,21 @@
                     const status = d.status || 'LEGACY';
                     const canAcknowledge = !d.credited && d.donationId && ['AWAITING_EVIDENCE','DETECTED_REVIEW','NEEDS_REVIEW','MATCHED_REVIEW','AMBIGUOUS','UNMATCHED','UNPARSEABLE'].includes(status);
                     const step = (done, label, optional = false) => `<div style="display:flex; align-items:center; gap:8px; margin:7px 0; color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${done ? '#D1FAE5' : '#F1F5F9'}; color:${done ? '#047857' : '#64748B'}; font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
-                    return `<div style="border:1px solid var(--border); border-radius:12px; padding:14px;">
-                        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:start;">
-                            <div><strong>${escapeHtml(title)}</strong><div style="color:var(--text-gray); font-size:.9rem;">From ${escapeHtml(d.donor || 'Donator')} · UTR ${escapeHtml(d.utr || 'not provided')}</div></div>
-                            <strong style="font-size:1.1rem;">₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong>
+                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                        <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <span><strong>${escapeHtml(d.donor || 'Donor')}</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">UTR ${escapeHtml(d.utr || 'not provided')} · <span style="color:${d.credited ? '#047857' : '#B45309'};font-weight:700;">${d.credited ? 'PAID' : 'PENDING VERIFICATION'}</span></span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                        </summary>
+                        <div style="padding:0 0 14px;">
+                            <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
+                                ${step(Boolean(d.donorMarkedPaid), "Donator marked as PAID")}
+                                ${step(Boolean(d.detectorReported), "OpenUPI Watch reported RECEIVED", true)}
+                                ${step(Boolean(d.creatorAcknowledged || d.credited), "Creator: I HAVE RECEIVED THIS")}
+                            </div>
+                            <div style="margin-top:8px;font-size:.88rem;color:var(--text-gray);">${d.note ? escapeHtml(d.note) : 'Check your UPI app or bank record before acknowledging receipt.'}</div>
+                            ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px;color:#047857;font-weight:700;">✓ Credited to campaign total</div>' : '')}
                         </div>
-                        <div style="margin-top:12px; padding:10px 12px; border-radius:10px; background:#F8FAFC;">
-                            ${step(Boolean(d.donorMarkedPaid), "Donator marked as PAID")}
-                            ${step(Boolean(d.detectorReported), "OpenUPI Watch reported RECEIVED", true)}
-                            ${step(Boolean(d.creatorAcknowledged || d.credited), "Creator: I HAVE RECEIVED THIS")}
-                        </div>
-                        <div style="margin-top:8px; font-size:.88rem; color:var(--text-gray);">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong>${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
-                        ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px; color:#047857; font-weight:700;">✓ Credited to campaign total</div>' : '')}
-                    </div>`;
+                    </details>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading donation claims.</p>'; }
         }
@@ -1324,15 +1362,20 @@
                 const step = (done, label, optional = false) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${done ? '#D1FAE5' : '#F1F5F9'};font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
                 el.innerHTML = res.donations.map(d => {
                     const campaign = allCampaigns.find(c => String(c.id) === String(d.campaignId));
-                    return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px;">
-                        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>${escapeHtml(campaign ? campaign.title : d.campaignId)}</strong><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong></div>
-                        <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#F8FAFC;">
-                            ${step(Boolean(d.donorMarkedPaid), 'Donator marked as PAID')}
-                            ${step(Boolean(d.detectorReported), 'OpenUPI Watch reported RECEIVED', true)}
-                            ${step(Boolean(d.creatorAcknowledged || d.credited), 'Creator: I HAVE RECEIVED THIS')}
+                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                        <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <span><strong>Donation claim</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                        </summary>
+                        <div style="padding:0 0 14px;">
+                            <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
+                                ${step(Boolean(d.donorMarkedPaid), 'Donator marked as PAID')}
+                                ${step(Boolean(d.detectorReported), 'OpenUPI Watch reported RECEIVED', true)}
+                                ${step(Boolean(d.creatorAcknowledged || d.credited), 'Creator: I HAVE RECEIVED THIS')}
+                            </div>
+                            <div style="margin-top:8px;font-size:.9rem;">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong></div>
                         </div>
-                        <div style="margin-top:8px;font-size:.9rem;">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong></div>
-                    </div>`;
+                    </details>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading your donation progress.</p>'; }
         }
