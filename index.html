@@ -1286,7 +1286,8 @@
                 endDate: document.getElementById('cDate').value,
                 upi: document.getElementById('cUpi').value,
                 creator: session.name,
-                userId: session.userId
+                userId: session.userId,
+                sessionToken: session.sessionToken
             };
 
             fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(data) })
