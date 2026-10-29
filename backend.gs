@@ -47,7 +47,7 @@ function doGet(e) {
       const user = users.find((row, i) => i > 0 && String(row[0]) === userId);
       if (user) return response({ status: 'success', data: {
         user_id: user[0], phone: user[1], name: user[4], email: user[7],
-        about: user[8], socials: user[9], photo_url: user[10], email_verified: String(user[12] || '') === 'TRUE'
+        about: user[8], socials: user[9], photo_url: user[10], email_verified: String(user[12] || '').toUpperCase() === 'TRUE'
       }});
       return response({ error: 'User not found' });
     }
@@ -176,6 +176,7 @@ function doPost(e) {
     }
 
     if (action === 'send_email_verification') {
+      if (ss.getSheetByName('Users').getLastColumn() < 13) ss.getSheetByName('Users').getRange(1, 13).setValue('email_verified');
       const userId = String(data.userId || '');
       if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       const email = String(data.email || '').trim().toLowerCase();
