@@ -175,6 +175,7 @@
 
         /* --- APP DASHBOARD --- */
         aside { width: 260px; background: var(--white); border-right: 1px solid var(--border); padding: 24px; position: fixed; height: 100vh; overflow-y: auto; z-index: 900; transition: transform 0.3s ease; top: 0; left: 0; }
+        .sidebar-close-btn { display: none; border: 0; background: transparent; color: var(--text-gray); font-size: 1.5rem; cursor: pointer; float: right; padding: 4px; }
         .nav-header { font-size: 0.75rem; text-transform: uppercase; color: #94A3B8; margin: 24px 0 12px; font-weight: 700; letter-spacing: 1px; padding-left: 12px; }
         .nav-item { padding: 12px 16px; margin-bottom: 4px; border-radius: 12px; cursor: pointer; color: var(--text-gray); font-weight: 600; display: flex; align-items: center; gap: 12px; transition: 0.2s; }
         .nav-item:hover, .nav-item.active { background: var(--primary-light); color: var(--primary); }
@@ -248,39 +249,70 @@
         .creator-link { color: var(--primary); font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: 0.2s; }
         .creator-link:hover { text-decoration-color: var(--primary); }
 
-        /* --- RESPONSIVE --- */
+        /* --- RESPONSIVE LAYOUT --- */
+        html { width: 100%; overflow-x: clip; }
+        img, svg, video, canvas { max-width: 100%; }
+        .container, section, #landingView, #appView { min-width: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; align-items: center; }
+        .stat-item { min-width: 0; padding: 8px; }
+        .stat-item h3 { font-size: clamp(1.5rem, 4vw, 2.8rem); overflow-wrap: anywhere; }
+        .stat-item p { overflow-wrap: anywhere; letter-spacing: .06em; }
+        .campaign-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+        .app-main { min-width: 0; }
+        .profile-stats-row { flex-wrap: wrap; }
+        .profile-stats-row > * { min-width: 0; }
+        .social-input-row { min-width: 0; }
+        .content-box, .detail-box, .profile-header { min-width: 0; overflow-wrap: anywhere; }
+
         @media (max-width: 992px) {
             .hero-content { flex-direction: column-reverse; text-align: center; }
-            .hero-text { text-align: center; } 
-            .hero-btns { justify-content: center; }
-            .hero-image svg { width: 250px; }
-            .campaign-grid, .comp-grid, .dashboard-grid, .stats-grid, .steps-grid { grid-template-columns: 1fr; }
-            .stats-grid { gap: 40px; }
-            aside { left: -100%; width: 85%; box-shadow: 10px 0 20px rgba(0,0,0,0.1); }
-            aside.open { left: 0; }
-            .app-main { margin-left: 0; padding: 1.5rem; }
-            .detail-layout { grid-template-columns: 1fr; }
+            .hero-text { text-align: center; }
+            .hero-btns { justify-content: center; flex-wrap: wrap; }
+            .hero-image svg { width: min(250px, 100%); }
+            .campaign-grid, .comp-grid, .dashboard-grid, .steps-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+            .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+            .sidebar-close-btn { display: inline-flex; align-items: center; justify-content: center; }
+            aside { left: 0; transform: translateX(-105%); width: min(320px, 86vw); max-width: 100%; box-shadow: 10px 0 24px rgba(0,0,0,.14); z-index: 3100; }
+            aside.open { transform: translateX(0); }
+            .app-main { margin-left: 0; padding: 1.5rem; width: 100%; }
+            .detail-layout { grid-template-columns: minmax(0, 1fr); }
         }
 
         @media (max-width: 768px) {
-            .container { padding: 0 20px; } 
+            .container { padding: 0 16px; }
             section { padding: 50px 0; }
+            .section-title { font-size: clamp(1.6rem, 6vw, 2.25rem); }
+            .section-subtitle { margin-bottom: 32px; font-size: 1rem; }
             .hero { padding: 60px 0; min-height: auto; }
-            .hero h1 { font-size: 2.5rem; }
-            .mobile-menu-btn { display: block; }
+            .hero-text h1, .hero h1 { font-size: clamp(2rem, 8vw, 2.5rem); }
+            .hero-text p { font-size: 1.05rem; }
+            .mobile-menu-btn { display: block; flex-shrink: 0; }
             .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; flex-direction: column; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 1px solid var(--border); }
             .nav-links.active { display: flex; }
             .nav-links .btn-sm { width: 100%; margin-top: 10px; height: 48px; }
             #landingHeader .search-bar { display: none; }
-            .footer-grid { grid-template-columns: 1fr; text-align: center; gap: 40px; }
+            .footer-grid { grid-template-columns: minmax(0, 1fr); text-align: center; gap: 32px; }
             .footer-col .logo, .social-icons { justify-content: center; }
-            .modal-content { padding: 0; }
+            .modal-content { padding: 0; max-width: 100%; max-height: calc(100dvh - 24px); }
             .modal-scroll-area { padding: 24px; }
-            
-            /* App Specifics */
-            #appPageTitle { display: none; } 
-            .app-main { padding: 1rem; }
-            #detailsView, #profileView, #contentView { padding: 20px 16px; }
+            .app-main { padding: 12px; }
+            #appPageTitle { display: block; font-size: 1.1rem !important; }
+            #detailsView, #profileView, #contentView { padding: 16px 12px; }
+            .content-box, .detail-box, .profile-header { padding: 20px; }
+            .profile-stats-row { gap: 12px; }
+            .stat-card { padding: 16px; }
+            .stat-value { font-size: clamp(1.3rem, 5vw, 2rem); }
+            .comp-col.highlight { transform: none; }
+            .c-body { padding: 18px; }
+            .c-stats { gap: 8px; flex-wrap: wrap; }
+        }
+
+        @media (max-width: 380px) {
+            .stats-grid { grid-template-columns: minmax(0, 1fr); }
+            .hero-btns .btn { width: 100%; }
+            .app-main > div:first-child { gap: 8px; }
+            .app-main .search-bar { max-width: 46vw !important; }
+            .modal-scroll-area { padding: 18px; }
         }
     </style>
 </head>
@@ -472,6 +504,7 @@
 
     <div id="appView" class="hidden">
         <aside id="sidebar">
+            <button type="button" class="sidebar-close-btn" aria-label="Close navigation" onclick="closeAppSidebar()"><i class="ph ph-x"></i></button>
             <div class="logo" style="margin-bottom:2rem; cursor:pointer;" onclick="navigateApp('Dashboard')">
                 <i class="ph ph-hand-heart" style="color:var(--primary)"></i>&nbsp;FundRaja
             </div>
@@ -495,7 +528,7 @@
 
         <div class="app-main">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; border-bottom:1px solid var(--border); padding-bottom:16px;">
-                <div class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="ph ph-list"></i></div>
+                <div class="mobile-menu-btn" role="button" tabindex="0" aria-label="Toggle navigation" onclick="toggleAppSidebar()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAppSidebar();}"><i class="ph ph-list"></i></div>
                 <h2 id="appPageTitle" style="font-size:1.5rem; font-weight:800; margin-right:auto; margin-left:12px;">Dashboard</h2>
                 <div class="search-bar" style="max-width:280px;">
                     <i class="ph ph-magnifying-glass search-icon"></i>
@@ -1243,6 +1276,15 @@
 
         // --- MODAL UTILS ---
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        function toggleAppSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.toggle('open');
+        }
+        function closeAppSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.remove('open');
+        }
+
         function openLogin() { closeModal('signupModal'); document.getElementById('loginModal').style.display = 'flex'; }
         function openSignup() { closeModal('loginModal'); document.getElementById('signupModal').style.display = 'flex'; }
         function switchToSignup() { openSignup(); }
