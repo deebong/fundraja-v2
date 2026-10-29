@@ -707,6 +707,7 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxaDMlW5dpPei_S04tPl7FOsAAz9dDF0w-qZ4qTjsOXWRWWMBFQayw2-P1jypsxKG9WXQ/exec';
         const CLIENT_ID = "235867347996-oqv3jdtfopsbh0gdha5v726nmogoo9fg.apps.googleusercontent.com";
@@ -1223,10 +1224,40 @@
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'pair_detector', userId:session.userId, sessionToken:session.sessionToken, recipientUpi }) }).then(r=>r.json());
                 if(res.status !== 'success') return alert(res.error || 'Could not pair detector.');
-                alert('PAIRING TOKEN (shown once):\n\n' + res.token + '\n\nIn OpenUPI Watch, enter this token, the Apps Script Web App URL, and recipient UPI ID. Do not share the token.');
+                showDetectorPairingQr({
+                    type: 'openupi-pairing',
+                    version: 1,
+                    endpoint: APPS_SCRIPT_URL,
+                    token: res.token,
+                    recipientUpi: res.recipientUpi
+                });
                 loadDetectorStatus();
             } catch(e) { alert('Network error while creating pairing token.'); }
             finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
+        }
+
+        function showDetectorPairingQr(payload) {
+            let modal = document.getElementById('detectorPairingQrModal');
+            if(!modal) {
+                modal = document.createElement('div');
+                modal.id = 'detectorPairingQrModal';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:18px;';
+                modal.innerHTML = `<div style="background:white;border-radius:18px;padding:24px;max-width:420px;width:100%;text-align:center;max-height:90vh;overflow:auto;">
+                    <h3 style="margin-bottom:8px;">Pair OpenUPI Watch</h3>
+                    <p style="color:#64748B;margin-bottom:16px;">Open OpenUPI Watch on Android, tap Scan pairing QR, and scan this code. Keep it private.</p>
+                    <div id="detectorPairingQrCode" style="display:flex;justify-content:center;margin:14px auto;min-height:220px;align-items:center;"></div>
+                    <p style="font-size:.85rem;color:#64748B;margin:12px 0;">This QR contains a private, revocable pairing token. Do not share or screenshot it.</p>
+                    <button class="btn btn-outline" onclick="document.getElementById('detectorPairingQrModal').remove()">Close</button>
+                </div>`;
+                document.body.appendChild(modal);
+            }
+            const qrContainer = document.getElementById('detectorPairingQrCode');
+            qrContainer.innerHTML = '';
+            if(typeof QRCode === 'undefined') {
+                qrContainer.innerHTML = '<p style="color:#B91C1C;">QR generator did not load. Reload the page and try again.</p>';
+                return;
+            }
+            new QRCode(qrContainer, { text: JSON.stringify(payload), width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
         }
 
         async function loadDetectorStatus() {
@@ -1252,13 +1283,19 @@
                     const title = camp ? camp.title : d.campaignId;
                     const status = d.status || 'LEGACY';
                     const canAcknowledge = !d.credited && d.donationId && ['AWAITING_EVIDENCE','DETECTED_REVIEW','NEEDS_REVIEW','MATCHED_REVIEW','AMBIGUOUS','UNMATCHED','UNPARSEABLE'].includes(status);
+                    const step = (done, label, optional = false) => `<div style="display:flex; align-items:center; gap:8px; margin:7px 0; color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${done ? '#D1FAE5' : '#F1F5F9'}; color:${done ? '#047857' : '#64748B'}; font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
                     return `<div style="border:1px solid var(--border); border-radius:12px; padding:14px;">
                         <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:start;">
-                            <div><strong>${escapeHtml(title)}</strong><div style="color:var(--text-gray); font-size:.9rem;">From ${escapeHtml(d.donor || 'Donor')} · UTR ${escapeHtml(d.utr || 'not provided')}</div></div>
+                            <div><strong>${escapeHtml(title)}</strong><div style="color:var(--text-gray); font-size:.9rem;">From ${escapeHtml(d.donor || 'Donator')} · UTR ${escapeHtml(d.utr || 'not provided')}</div></div>
                             <strong style="font-size:1.1rem;">₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong>
                         </div>
-                        <div style="margin-top:8px; font-size:.88rem; color:var(--text-gray);">Status: <strong>${escapeHtml(status.replace(/_/g,' '))}</strong>${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
-                        ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px; color:#047857; font-weight:700;">Credited to campaign total</div>' : '')}
+                        <div style="margin-top:12px; padding:10px 12px; border-radius:10px; background:#F8FAFC;">
+                            ${step(Boolean(d.donorMarkedPaid), "Donator marked as PAID")}
+                            ${step(Boolean(d.detectorReported), "OpenUPI Watch reported RECEIVED", true)}
+                            ${step(Boolean(d.creatorAcknowledged || d.credited), "Creator: I HAVE RECEIVED THIS")}
+                        </div>
+                        <div style="margin-top:8px; font-size:.88rem; color:var(--text-gray);">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong>${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
+                        ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px; color:#047857; font-weight:700;">✓ Credited to campaign total</div>' : '')}
                     </div>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading donation claims.</p>'; }
