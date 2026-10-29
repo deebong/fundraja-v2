@@ -1385,7 +1385,7 @@
                     action:'verify_email_code', userId:session.userId, sessionToken:session.sessionToken, email:email, code:code
                 })}).then(r=>r.json());
                 status.innerText = res.message || res.error || 'Unable to verify email.';
-                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); renderProfileDataToContainer(currentProfileData, 'appProf'); }
+                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); renderProfileDataToContainer(currentProfileData, 'appProf'); syncEmailVerificationUI(); document.getElementById('eEmailCode').value = ''; }
                 else showNotice(res.error || 'Email verification failed.');
             } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
         }
