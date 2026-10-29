@@ -1307,19 +1307,21 @@
                     const status = d.status || 'LEGACY';
                     const canAcknowledge = !d.credited && d.donationId && ['AWAITING_EVIDENCE','DETECTED_REVIEW','NEEDS_REVIEW','MATCHED_REVIEW','AMBIGUOUS','UNMATCHED','UNPARSEABLE'].includes(status);
                     const step = (done, label, optional = false) => `<div style="display:flex; align-items:center; gap:8px; margin:7px 0; color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${done ? '#D1FAE5' : '#F1F5F9'}; color:${done ? '#047857' : '#64748B'}; font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
-                    return `<div style="border:1px solid var(--border); border-radius:12px; padding:14px;">
-                        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:start;">
-                            <div><strong>${escapeHtml(title)}</strong><div style="color:var(--text-gray); font-size:.9rem;">From ${escapeHtml(d.donor || 'Donator')} · UTR ${escapeHtml(d.utr || 'not provided')}</div></div>
-                            <strong style="font-size:1.1rem;">₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong>
+                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                        <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <span><strong>${escapeHtml(title)}</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${escapeHtml(d.donor || 'Donator')} · UTR ${escapeHtml(d.utr || 'not provided')} · <span style="color:${d.credited ? '#047857' : '#B45309'};font-weight:700;">${d.credited ? 'PAID' : 'PENDING VERIFICATION'}</span></span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                        </summary>
+                        <div style="padding:0 0 14px;">
+                            <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
+                                ${step(Boolean(d.donorMarkedPaid), "Donator marked as PAID")}
+                                ${step(Boolean(d.detectorReported), "OpenUPI Watch reported RECEIVED", true)}
+                                ${step(Boolean(d.creatorAcknowledged || d.credited), "Creator: I HAVE RECEIVED THIS")}
+                            </div>
+                            <div style="margin-top:8px;font-size:.88rem;color:var(--text-gray);">${d.note ? escapeHtml(d.note) : 'Check your UPI app or bank record before acknowledging receipt.'}</div>
+                            ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px;color:#047857;font-weight:700;">✓ Credited to campaign total</div>' : '')}
                         </div>
-                        <div style="margin-top:12px; padding:10px 12px; border-radius:10px; background:#F8FAFC;">
-                            ${step(Boolean(d.donorMarkedPaid), "Donator marked as PAID")}
-                            ${step(Boolean(d.detectorReported), "OpenUPI Watch reported RECEIVED", true)}
-                            ${step(Boolean(d.creatorAcknowledged || d.credited), "Creator: I HAVE RECEIVED THIS")}
-                        </div>
-                        <div style="margin-top:8px; font-size:.88rem; color:var(--text-gray);">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong>${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
-                        ${canAcknowledge ? `<button class="btn btn-primary" style="margin-top:10px;" onclick="acknowledgeDonation('${encodeURIComponent(d.donationId)}')">I have received this payment</button>` : (d.credited ? '<div style="margin-top:8px; color:#047857; font-weight:700;">✓ Credited to campaign total</div>' : '')}
-                    </div>`;
+                    </details>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading donation claims.</p>'; }
         }
@@ -1334,15 +1336,20 @@
                 const step = (done, label, optional = false) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${done ? '#D1FAE5' : '#F1F5F9'};font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
                 el.innerHTML = res.donations.map(d => {
                     const campaign = allCampaigns.find(c => String(c.id) === String(d.campaignId));
-                    return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px;">
-                        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>${escapeHtml(campaign ? campaign.title : d.campaignId)}</strong><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong></div>
-                        <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#F8FAFC;">
-                            ${step(Boolean(d.donorMarkedPaid), 'Donator marked as PAID')}
-                            ${step(Boolean(d.detectorReported), 'OpenUPI Watch reported RECEIVED', true)}
-                            ${step(Boolean(d.creatorAcknowledged || d.credited), 'Creator: I HAVE RECEIVED THIS')}
+                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                        <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <span><strong>${escapeHtml(campaign ? campaign.title : d.campaignId)}</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                        </summary>
+                        <div style="padding:0 0 14px;">
+                            <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
+                                ${step(Boolean(d.donorMarkedPaid), 'Donator marked as PAID')}
+                                ${step(Boolean(d.detectorReported), 'OpenUPI Watch reported RECEIVED', true)}
+                                ${step(Boolean(d.creatorAcknowledged || d.credited), 'Creator: I HAVE RECEIVED THIS')}
+                            </div>
+                            <div style="margin-top:8px;font-size:.9rem;">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong></div>
                         </div>
-                        <div style="margin-top:8px;font-size:.9rem;">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong></div>
-                    </div>`;
+                    </details>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading your donation progress.</p>'; }
         }
