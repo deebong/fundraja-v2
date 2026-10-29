@@ -970,6 +970,11 @@
                         <p id="detectorStatusText" style="color:var(--text-gray); margin-top:12px;">Detector not checked yet.</p>
                     </div>
                     <div style="background:white; padding:24px; border-radius:16px; border:1px solid var(--border); margin-bottom:24px;">
+                        <h3 style="margin-bottom:6px;">My Donations & Payment Progress</h3>
+                        <p style="color:var(--text-gray); margin-bottom:14px;">Track your submitted donation claims. OpenUPI Watch is optional; the creator must verify receipt before a donation is marked PAID.</p>
+                        <div id="myDonationPaymentsList" style="display:grid; gap:12px;"><p style="color:var(--text-gray);">Loading your donation progress...</p></div>
+                    </div>
+                    <div style="background:white; padding:24px; border-radius:16px; border:1px solid var(--border); margin-bottom:24px;">
                         <h3 style="margin-bottom:6px;">Donation Claims & Confirmations</h3>
                         <p style="color:var(--text-gray); margin-bottom:14px;">Review donor claims and acknowledge receipt only after checking your UPI app or bank record. Acknowledgement updates the displayed campaign total once.</p>
                         <div id="creatorPaymentsList" style="display:grid; gap:12px;"><p style="color:var(--text-gray);">Loading donation claims...</p></div>
@@ -982,6 +987,7 @@
                 if(!currentProfileData) await fetchProfileData(session.userId);
                 renderProfileDataToContainer(currentProfileData, 'appProf');
                 loadCreatorDonations();
+                loadMyDonations();
                 loadDetectorStatus();
             } else {
                 // Overlay View
@@ -1195,7 +1201,7 @@
             btn.innerText = 'Submitting...';
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify({
-                    action: 'donate', campId: currentDetails.id, amount: amount, donor: donor, ref: utr
+                    action: 'donate', campId: currentDetails.id, amount: amount, donor: donor, ref: utr, userId: session?.userId, sessionToken: session?.sessionToken
                 })}).then(r => r.json());
                 if(res.status === 'success') {
                     alert('Donation claim saved. It is pending until the creator confirms receipt.');
@@ -1299,6 +1305,29 @@
                     </div>`;
                 }).join('');
             } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading donation claims.</p>'; }
+        }
+
+        async function loadMyDonations() {
+            const el = document.getElementById('myDonationPaymentsList');
+            if(!el || !session?.userId) return;
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'get_my_donations', userId:session.userId, sessionToken:session.sessionToken }) }).then(r=>r.json());
+                if(res.status !== 'success') { el.innerHTML = '<p style="color:#B91C1C;">' + escapeHtml(res.error || 'Could not load your donations.') + '</p>'; return; }
+                if(!res.donations.length) { el.innerHTML = '<p style="color:var(--text-gray);">You have not submitted any donation claims from this account yet.</p>'; return; }
+                const step = (done, label, optional = false) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${done ? '#D1FAE5' : '#F1F5F9'};font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
+                el.innerHTML = res.donations.map(d => {
+                    const campaign = allCampaigns.find(c => String(c.id) === String(d.campaignId));
+                    return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px;">
+                        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>${escapeHtml(campaign ? campaign.title : d.campaignId)}</strong><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong></div>
+                        <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#F8FAFC;">
+                            ${step(Boolean(d.donorMarkedPaid), 'Donator marked as PAID')}
+                            ${step(Boolean(d.detectorReported), 'OpenUPI Watch reported RECEIVED', true)}
+                            ${step(Boolean(d.creatorAcknowledged || d.credited), 'Creator: I HAVE RECEIVED THIS')}
+                        </div>
+                        <div style="margin-top:8px;font-size:.9rem;">Overall status: <strong style="color:${d.credited ? '#047857' : '#B45309'};">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</strong></div>
+                    </div>`;
+                }).join('');
+            } catch(e) { el.innerHTML = '<p style="color:#B91C1C;">Network error loading your donation progress.</p>'; }
         }
 
         async function acknowledgeDonation(encodedDonationId) {
