@@ -121,11 +121,12 @@ function doPost(e) {
 
     // --- AUTH ACTIONS (preserves the existing FundRaja auth contract) ---
     if (action === 'signup') {
+      if (rateLimitExceeded_('signup:' + sha256_(String(data.phone || '').trim()), 4, 3600)) return response({ error: 'Too many signup attempts. Try again later.' });
       const userSheet = ss.getSheetByName('Users');
       if (!userSheet) return response({ error: 'Users sheet not found' });
       const users = userSheet.getDataRange().getValues();
       const phone = String(data.phone || '');
-      if (!phone || !data.name || !/^\d{4,8}$/.test(String(data.pin || ''))) return response({ error: 'Enter a name, phone, and 4–8 digit PIN' });
+      if (!phone || !data.name || !/^\d{8,12}$/.test(String(data.pin || ''))) return response({ error: 'Enter a name, phone, and an 8–12 digit PIN' });
       if (users.some((row, i) => i > 0 && String(row[1]) === phone)) return response({ error: 'Phone number already registered' });
       const salt = Utilities.getUuid();
       const userId = 'USR-' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase();
@@ -135,27 +136,23 @@ function doPost(e) {
     }
 
     if (action === 'login') {
-      const phone = String(data.phone || '');
-      const cache = CacheService.getScriptCache();
-      const attemptsKey = 'attempts_' + phone;
-      const failedAttempts = parseInt(cache.get(attemptsKey) || '0', 10);
-      if (failedAttempts >= 3) return response({ error: 'Account locked. Try again in 15 mins.' });
+      const phone = String(data.phone || '').trim();
+      if (rateLimitExceeded_('login:' + sha256_(phone), 10, 900)) return response({ error: 'Too many login attempts. Try again in 15 minutes.' });
       const userSheet = ss.getSheetByName('Users');
       if (!userSheet) return response({ error: 'Users sheet not found' });
       const users = userSheet.getDataRange().getValues();
       const userRow = users.find((row, i) => i > 0 && String(row[1]) === phone);
       if (!userRow) return response({ error: 'User not found' });
-      if (hashPin(data.pin || '', userRow[3]) === userRow[2]) {
-        cache.remove(attemptsKey);
+      if (verifyAndUpgradePin_(userSheet, users.findIndex((row, i) => i > 0 && String(row[1]) === phone) + 1, data.pin || '', userRow[3], userRow[2])) {
         const rowIndex = users.findIndex((row, i) => i > 0 && String(row[0]) === String(userRow[0])) + 1;
         const sessionToken = issueSession_(userSheet, rowIndex);
         return response({ status: 'success', userId: userRow[0], name: userRow[4], sessionToken: sessionToken });
       }
-      cache.put(attemptsKey, String(failedAttempts + 1), 900);
       return response({ error: 'Invalid PIN.' });
     }
 
     if (action === 'google_auth') {
+      if (rateLimitExceeded_('google_auth:' + sha256_(String(data.credential || '').slice(0, 200)), 10, 900)) return response({ error: 'Too many Google sign-in attempts. Try again later.' });
       // Verify the ID token with Google's tokeninfo endpoint; never trust client-decoded claims.
       const credential = String(data.credential || '');
       if (!credential) return response({ error: 'Google credential required' });
@@ -199,6 +196,7 @@ function doPost(e) {
       if (data.socials !== undefined) userSheet.getRange(rowIndex, 10).setValue(data.socials);
       if (data.photoUrl !== undefined) userSheet.getRange(rowIndex, 11).setValue(data.photoUrl);
       if (data.phone && data.pin) {
+        if (!/^\d{8,12}$/.test(String(data.pin))) return response({ error: 'PIN must contain 8–12 digits.' });
         const phone = String(data.phone);
         if (users.some((row, idx) => idx > 0 && String(row[1]) === phone && idx + 1 !== rowIndex)) return response({ error: 'Phone already in use' });
         const salt = Utilities.getUuid();
@@ -210,6 +208,7 @@ function doPost(e) {
     }
 
     if (action === 'send_email_verification') {
+      if (rateLimitExceeded_('email_verify:' + String(data.userId || ''), 3, 3600)) return response({ error: 'Too many verification requests. Try again in an hour.' });
       if (ss.getSheetByName('Users').getLastColumn() < 13) ss.getSheetByName('Users').getRange(1, 13).setValue('email_verified');
       const userId = String(data.userId || '');
       if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
@@ -737,9 +736,60 @@ function requireSession_(ss, userId, token) {
   return !!(user && String(user[11] || '') && String(user[11]) === sha256_(String(token)));
 }
 
+// PIN hashes use a script-property pepper plus a per-user salt. Existing SHA-256-only
+// hashes are upgraded after the first successful login without forcing a password reset.
 function hashPin(pin, salt) {
+  const props = PropertiesService.getScriptProperties();
+  let pepper = props.getProperty('FUNDRaja_PIN_PEPPER');
+  if (!pepper) {
+    pepper = Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('FUNDRaja_PIN_PEPPER', pepper);
+  }
+  const bytes = Utilities.computeHmacSha256Signature(String(salt) + ':' + String(pin), pepper);
+  return 'v2
+function response(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+ + bytes.map(b => { const n = b < 0 ? b + 256 : b; return ('0' + n.toString(16)).slice(-2); }).join('');
+}
+function legacyHashPin_(pin, salt) {
   const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(pin) + String(salt));
   return digest.map(b => { const n = b < 0 ? b + 256 : b; return ('0' + n.toString(16)).slice(-2); }).join('');
+}
+function verifyAndUpgradePin_(sheet, rowIndex, pin, salt, storedHash) {
+  const stored = String(storedHash || '');
+  if (stored.startsWith('v2
+function response(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+)) return hashPin(pin, salt) === stored;
+  if (!stored || legacyHashPin_(pin, salt) !== stored) return false;
+  sheet.getRange(rowIndex, 3).setValue(hashPin(pin, salt));
+  return true;
+}
+// Persistent, script-wide rate limits. Unlike CacheService, ScriptProperties survive cache
+// eviction. Locking keeps concurrent requests from trivially bypassing the counter.
+function rateLimitExceeded_(key, limit, windowSeconds) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const propKey = 'RL_' + sha256_(key).slice(0, 40);
+    const now = Date.now();
+    let state = {};
+    try { state = JSON.parse(props.getProperty(propKey) || '{}'); } catch (e) {}
+    if (!state.startedAt || now - Number(state.startedAt) >= windowSeconds * 1000) {
+      state = { startedAt: now, count: 0 };
+    }
+    state.count = Number(state.count || 0) + 1;
+    props.setProperty(propKey, JSON.stringify(state));
+    return state.count > limit;
+  } finally {
+    lock.releaseLock();
+  }
+}
+function clearRateLimit_(key) {
+  PropertiesService.getScriptProperties().deleteProperty('RL_' + sha256_(key).slice(0, 40));
 }
 function response(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
