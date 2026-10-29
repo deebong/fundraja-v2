@@ -1,43 +1,173 @@
-# FundRaja + OpenUPI Watch: payment-detection MVP
+# FundRaja
 
-This bundle updates the existing vanilla HTML/JavaScript frontend and Google Apps Script backend and includes a starter native Android notification listener.
+FundRaja is a lightweight serverless crowdfunding prototype for campaign discovery, creator profiles, donation claims, and creator-side payment review. The frontend is static HTML/CSS/vanilla JavaScript, the API runs on Google Apps Script, and Google Sheets stores application data. OpenUPI Watch is an optional Android companion that reports payment-app notification evidence; it is not a bank integration.
 
-## Files
-- `fundraja_index.html` — updated FundRaja frontend with detector pairing, creator donation review, and acknowledgement UI.
-- `backend.gs` — updated Apps Script backend.
-- `OpenUPIWatch-Android-MVP/` — native Kotlin Android app and GitHub Actions workflow.
+> **Payment safety:** A donor-submitted claim or Android notification is not proof that funds reached the recipient. A creator must independently check their UPI app or bank record and manually acknowledge receipt before FundRaja credits the campaign total.
 
-## Backend deployment
-1. Back up the current Apps Script project and Google Sheet.
-2. Open the existing Apps Script project attached to the FundRaja spreadsheet.
-3. Replace the current backend code with `backend.gs`. If this is not a container-bound script, set `SHEET_ID` to the correct spreadsheet ID before deploying. Do not use another project's Sheet ID.
-4. Save, then use **Deploy → Manage deployments → Edit → New version → Deploy** so the existing Web App URL can remain in use.
-5. Log out of FundRaja and log back in once. New server-issued session tokens are required for creator pairing and acknowledgement. The token hash is stored in Users column L (`session_token_hash`).
-6. Test on a copy of the spreadsheet first. The backend automatically adds new columns to `Donations` and creates `PaymentEvents` and `DetectorDevices` sheets as needed.
+## Technology stack
 
-## Frontend deployment
-Replace the currently hosted `fundraja_index.html` with this updated file. Keep the existing `APPS_SCRIPT_URL` and Google client ID unless your deployment uses different values. Test in a staging copy before production.
+- **Frontend:** HTML, CSS, vanilla JavaScript; responsive landing page, modals, campaign cards, and creator dashboard.
+- **Hosting:** GitHub Pages over HTTPS.
+- **Backend/API:** Google Apps Script Web App using doGet and doPost.
+- **Data:** Google Sheets, with Apps Script LockService protecting selected payment writes from concurrent processing.
+- **Identity:** phone + PIN login and Google Identity Services sign-in. Email verification is a separate profile trust signal.
+- **Media:** Google Drive image uploads when Drive permissions and storage configuration are set.
+- **Optional payment evidence:** Kotlin Android app using Android NotificationListenerService, paired with a creator account using a random device token.
+- **Automation:** GitHub Actions for Pages deployment and Android APK builds in the companion repository.
 
-## Build the Android APK without local Android tooling
-1. Create a new public GitHub repository named `openupi-watch`.
-2. Upload the contents of `OpenUPIWatch-Android-MVP/` to the repository root, preserving paths.
-3. Open **Actions**, enable workflows if asked, and run **Build OpenUPI Watch APK**.
-4. Download the `openupi-watch-debug-apk` artifact from the successful workflow run and extract `app-debug.apk`.
-5. Install it on an Android phone. Open OpenUPI Watch, paste the FundRaja Apps Script Web App URL, pairing token, and recipient UPI ID; save; then grant notification access in Android Settings.
-6. In FundRaja, open **My Profile → Automatic UPI Payment Detection → Pair Android Detector**. Copy the one-time token into the Android app. Do not share it.
+No Node.js, React build, Docker, or separate server hosting is required for the current frontend.
 
-## Current behavior and limits
-- Donor UTR submission creates a pending donation claim; it no longer increments the campaign total immediately.
-- The backend rejects duplicate submitted UTRs and assigns a unique donation ID.
-- Android notification events are deduplicated by event ID and recorded in `PaymentEvents`.
-- Matching uses the configured recipient UPI, parsed amount, and UTR when available. Ambiguous/unparseable notifications remain review items.
-- A raw notification never automatically increases campaign totals. A creator must check their UPI/bank record and acknowledge receipt. Acknowledgement is idempotent and increments the campaign total once.
-- Notification parsing is generic and will need app-specific tuning. Some payment apps do not expose enough details in notifications; some payments will not be detected. This is not independent bank-level verification.
-- The app requests notification-listener access only. It does not request SMS permission or read unrelated app data by design.
-- This is an MVP. Apps Script + Sheets is not a transactional database; test concurrency and recovery carefully before using for real fundraising.
+## Repository layout
 
-## Security notes before production
-- The new pairing, detector status, donation-list, and acknowledgement actions require a server-issued session token; only its hash is stored in the Users sheet. Existing browser sessions must log in again.
-- Google sign-in ID tokens are checked server-side using Google's tokeninfo endpoint and the configured OAuth client ID.
-- Never put detector tokens in public frontend code, screenshots, GitHub issues, or source control. The Android app stores its token locally on the paired device.
-- Review the full existing app authentication and campaign moderation model before production. This MVP does not constitute a full KYC system, fraud-control system, or bank verification integration.
+- **index.html** — complete static site, styles, modals, dashboard, and client-side API calls.
+- **backend.gs** — Apps Script backend; copy this file into the Apps Script project attached to the intended spreadsheet.
+- **README.md** — setup, architecture, safety notes, and upgrade plan.
+- Android companion source and build workflows live in [OpenUPIWatch-Android](https://github.com/deebong/OpenUPIWatch-Android).
+
+## Features
+
+- Responsive landing page, campaign discovery, search, category filtering, and campaign cards.
+- Account creation, phone/PIN login, Google sign-in, server-issued session tokens, and profile editing.
+- Email verification codes sent by Apps Script Mail service.
+- Public creator profiles, profile photos, optional social links, and campaign images.
+- Campaign creation and creator-owned campaign editing.
+- Donation claims with amount and 12-digit UTR validation and duplicate-UTR rejection.
+- Creator review of donation claims and optional OpenUPI Watch device status.
+- Detector pairing, revocation, event deduplication, basic notification amount/UTR parsing, and candidate matching.
+- Manual creator acknowledgement; the same donation is credited at most once by the acknowledgement handler.
+- In-site notice and confirmation modals.
+
+Features depend on the deployed Apps Script version, Google permissions, and correct sheet headers. The public repository alone does not prove that the live Apps Script backend has been updated.
+
+## Architecture and payment lifecycle
+
+1. A donor transfers money directly through their own UPI app, outside FundRaja.
+2. The donor submits a donation claim and UTR. FundRaja records it as pending evidence; it does not increase the campaign total at this stage.
+3. If enabled, OpenUPI Watch may report a payment notification as optional evidence. Notifications can be missing, delayed, misparsed, spoofed, or unrelated.
+4. FundRaja may mark a candidate for creator review when notification details match a pending claim. Matching is advisory only.
+5. The creator checks the actual UPI/bank transaction history and manually acknowledges receipt.
+6. Only that creator acknowledgement updates the displayed campaign total. This is not an independent verification service and cannot guarantee the creator has honestly checked the bank record.
+
+## Install and deploy
+
+### 1. Prepare Google Sheets
+
+1. Create a dedicated spreadsheet for this deployment. Do not use a spreadsheet containing unrelated personal or business data.
+2. Keep the spreadsheet private; do not publish it to the web or share it with donors.
+3. Create the base sheets and headers described in [Google Sheets schema](#google-sheets-schema). The backend can create detector/event sheets and add payment-related columns when needed.
+4. Back up the spreadsheet before deploying updates.
+
+### 2. Deploy the Apps Script backend
+
+1. Open **Extensions → Apps Script** from the spreadsheet, or create a standalone Apps Script project.
+2. Paste the complete current backend.gs into the script editor.
+3. For a standalone script, set SHEET_ID in backend.gs to the intended spreadsheet ID. For a spreadsheet-bound script, it can remain blank.
+4. Review GOOGLE_CLIENT_ID and use the OAuth client registered for your deployment if different.
+5. Save the project.
+6. For email and Drive features, select authorizeFundRajaServices in the function selector and click **Run**. Review the requested permissions and authorize with the account that owns the deployment. This function checks Mail quota and prepares the image folder.
+7. Select **Deploy → New deployment → Web app**. Choose an execution identity that can access the spreadsheet and set access according to your public-app model. Copy the Web App URL.
+8. For backend updates, use **Deploy → Manage deployments → Edit → New version → Deploy**. Keep the Web App URL stable if the frontend points to it.
+
+**Important:** A script executing as its owner can access that owner's spreadsheet and Drive. Treat the Web App URL as public, validate every action server-side, and never expose the spreadsheet itself.
+
+### 3. Configure and deploy the frontend
+
+1. Update APPS_SCRIPT_URL in index.html to the deployed Web App URL.
+2. Ensure the Google Identity Services client ID in the HTML matches backend.gs.
+3. Push index.html and this README to the repository's main branch. GitHub Pages should deploy the static site via the repository's Pages workflow/settings.
+4. Wait for the Pages Actions run to succeed, then open the published site and perform a hard refresh.
+5. Test using a separate spreadsheet and non-production accounts before using real campaigns.
+
+### 4. First-run verification checklist
+
+- Create an account and log out/in; confirm the session works.
+- Verify an email and confirm the verification controls disappear immediately.
+- Create a test campaign and confirm its status.
+- Confirm public creator profiles do not reveal private phone or email values.
+- Submit a test donation claim with a non-sensitive test UTR and confirm it remains pending.
+- Test pairing/revoking OpenUPI Watch and confirm events do not automatically credit a campaign.
+- Acknowledge a test claim and confirm repeated acknowledgement does not add the amount twice.
+- Test narrow phone, tablet, and desktop widths, including opening and closing the dashboard sidebar.
+- Review browser console and Apps Script execution logs. Do not use real payment data for test cases.
+
+## Google Sheets schema
+
+The existing workbook may contain legacy columns; header-based helpers preserve many existing headers and add missing ones.
+
+### Users
+
+Core fields include user ID, phone, PIN hash, PIN salt, display name, created timestamp, account status, email, about/bio, socials, photo URL, session token hash, and email verification state. The session token itself should not be stored in the sheet; only its hash is stored.
+
+### Campaigns
+
+The current frontend/backend use campaign ID, title, description/story, target amount, raised amount, recipient UPI ID, creator display name, category, end date, rewards/thank-you note, moderation status, creator user ID, and optional image URL. Creator user ID is used for ownership checks.
+
+### Donations
+
+The backend starts with legacy donation fields and adds unique donation ID, payment status, detected event ID, creator acknowledgement timestamp/user, credited timestamp, evidence note, donor marked-paid timestamp, detector report timestamp, and donor user ID. Header names matter; retain existing data and back up before changing columns.
+
+### DetectorDevices
+
+Stores device ID, creator user ID, SHA-256 token hash, creation/revocation timestamps, last-seen and last-event timestamps, recipient UPI ID, enabled state, device name, and pairing metadata. The raw pairing token is returned once during pairing and must be treated as a secret.
+
+### PaymentEvents
+
+Stores deduplicated event ID, receipt timestamp, paired creator/device, source package, parsed amount and UTR, recipient UPI ID, review status, optional matched donation ID, notification title/text, posted timestamp, and review note. Notification text can contain sensitive transaction details; restrict access to this sheet.
+
+## OpenUPI Watch setup
+
+1. Open [OpenUPIWatch-Android](https://github.com/deebong/OpenUPIWatch-Android) and run its Android build workflow, or use a verified APK artifact/release produced by that repository.
+2. Install the APK on a compatible Android phone.
+3. In FundRaja, open the creator dashboard and choose the detector pairing option to generate pairing configuration.
+4. Import the pairing information in OpenUPI Watch, save it, and grant notification access in Android Settings.
+5. Confirm the app reports that the backend connected and registered the device.
+6. Use controlled test notifications where appropriate. Never treat a notification as a bank statement or payment confirmation.
+
+The Android app should request only permissions necessary for notification listening and backend communication. Review the manifest and Android source before building a release. Do not share pairing QR codes, tokens, screenshots showing tokens, or production notification data.
+
+## Security model and limitations
+
+Current source-level measures include server-side session-token checks for sensitive actions, storage of session-token hashes, creator ownership checks for campaign editing and payment acknowledgement, hashed detector tokens, duplicate event/UTR checks, a script lock around selected payment writes, and server-side validation of Google sign-in token audience/email verification.
+
+This is a source review, not a formal penetration test or independent audit, and does not confirm that the deployed Apps Script version matches this repository.
+
+### Risks that still need attention before production
+
+- **PIN strength and storage:** A short numeric PIN plus salted SHA-256 is not a modern password-hashing scheme. Use a managed identity provider or a backend with a slow password hash such as Argon2id, bcrypt, or scrypt before storing significant funds or sensitive personal data.
+- **Rate limiting:** Apps Script cache-based throttles are best-effort and may be evicted. Login, signup, email-code sending, code verification, donation submission, and image upload need durable quotas and abuse monitoring.
+- **Email verification:** Use a cryptographically secure code generator, limit attempts, invalidate codes after use, and rate-limit sending by account and destination. Email verification is not identity/KYC verification.
+- **Apps Script deployment:** Restrict editor access, use a dedicated owner account, periodically review OAuth scopes and deployments, and avoid granting broad Drive access beyond what the app requires.
+- **Google Sheets permissions:** Only the deployment owner and trusted administrators should have spreadsheet access. Sheets are not a robust transactional database or immutable audit log.
+- **Media exposure:** Public image links are visible to anyone with the link. Do not upload sensitive documents or private photos. Consider image inspection and quotas.
+- **Social links:** Only HTTP(S) URLs should be rendered as external links; new tabs should use noopener/noreferrer.
+- **Browser security headers:** GitHub Pages does not let this repository configure every HTTP response header. Review the Content Security Policy and hosting headers; avoid unsafe script capabilities and move toward nonce/hash-based scripts where feasible.
+- **Operational monitoring:** Add alerts for repeated failures, suspicious pairing activity, unexpected image uploads, and unusual donation-claim volume.
+- **Privacy and legal requirements:** Publish a privacy notice and retention policy, minimize personal data, and obtain consent before notification text is sent to the backend. Assess applicable Indian data-protection, consumer-protection, tax, and fundraising requirements before public launch.
+- **No bank verification:** OpenUPI Watch is notification-based. Never advertise it as automatic bank verification or allow its event alone to credit donations.
+
+## Recommended production upgrades
+
+1. Replace PIN-only authentication with a managed identity system; add account recovery and revocation of all active sessions.
+2. Move payments, accounts, and audit records from Sheets to a database with transactions, access control, backups, and retention policies.
+3. Add durable rate limiting, anti-abuse controls, email verification attempt limits, and server-side request validation for every action.
+4. Add moderation/admin tooling, campaign reporting, immutable audit events, and a creator dispute workflow.
+5. Add explicit consent, configurable notification-data minimization, retention/deletion controls, and a privacy/security contact.
+6. Add automated tests for authorization boundaries, duplicate submissions, race conditions, malformed inputs, and XSS payloads; run dependency and secret scanning in CI.
+7. Add monitoring, redacted error reporting, scheduled backups, restore drills, and incident response documentation.
+8. Add accessibility checks and real-device responsive/browser testing.
+9. Add provider-specific notification parsers only where permitted and supported; continue to require manual creator confirmation.
+10. Before public launch, commission an independent security review and test the deployed Apps Script permissions and spreadsheet sharing settings.
+
+## Troubleshooting
+
+- **Campaigns do not load:** Check the Apps Script Web App URL, deployment version, execution logs, spreadsheet ID, and sheet headers. Inspect the browser console/network response.
+- **Email verification does not send:** Run authorizeFundRajaServices, check Mail quota, confirm the deployed backend is current, and inspect Apps Script execution logs.
+- **Image upload fails:** Confirm Drive authorization and image folder configuration. Image URLs are public by design; upload only content intended for public viewing.
+- **Session expired:** Sign in again. The backend rotates the stored session-token hash on login.
+- **OpenUPI Watch does not connect:** Confirm Web App URL, pairing token, recipient UPI ID, internet access, and Android notification-access setting. Re-pair if the token was revoked.
+- **A detector event appears:** Treat it as review evidence only. Confirm receipt directly in the UPI app or bank record before acknowledging a donation.
+- **Pages changes are not visible:** Check the GitHub Pages Actions run and hard-refresh after deployment completes.
+
+## License
+
+No LICENSE file was identified in the current repository tree. Add a LICENSE file with the intended license before inviting external contributions; do not assume a license based only on an earlier README or a linked repository.

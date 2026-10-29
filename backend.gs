@@ -63,15 +63,17 @@ function doGet(e) {
       const users = userSheet.getDataRange().getValues();
       const user = users.find((row, i) => i > 0 && String(row[0]) === userId);
       if (user) return response({ status: 'success', data: {
-        user_id: user[0], phone: user[1], name: user[4], email: user[7],
-        about: user[8], socials: user[9], photo_url: user[10], email_verified: String(user[12] || '').toUpperCase() === 'TRUE'
+        user_id: user[0], name: user[4],
+        about: user[8], socials: user[9], photo_url: user[10],
+        email_verified: String(user[12] || '').toUpperCase() === 'TRUE'
       }});
       return response({ error: 'User not found' });
     }
 
     return response({ error: 'Unknown operation' });
   } catch (err) {
-    return response({ error: String(err) });
+    console.error('FundRaja GET failure', err);
+    return response({ error: 'Request could not be completed.' });
   }
 }
 
@@ -84,6 +86,21 @@ function doPost(e) {
     if (action === 'detector_ping') return detectorPing_(getSpreadsheet_(), data);
 
     const ss = getSpreadsheet_();
+
+    if (action === 'get_my_profile') {
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+      const userSheet = ss.getSheetByName('Users');
+      if (!userSheet) return response({ error: 'Users sheet not found' });
+      const users = userSheet.getDataRange().getValues();
+      const user = users.find((row, i) => i > 0 && String(row[0]) === userId);
+      if (!user) return response({ error: 'User not found' });
+      return response({ status: 'success', data: {
+        user_id: user[0], phone: user[1], name: user[4], email: user[7],
+        about: user[8], socials: user[9], photo_url: user[10],
+        email_verified: String(user[12] || '').toUpperCase() === 'TRUE'
+      }});
+    }
 
     // --- IMAGE UPLOAD ---
     if (action === 'upload_image') {
@@ -273,7 +290,8 @@ function doPost(e) {
 
     return response({ error: 'Unknown action' });
   } catch (err) {
-    return response({ error: String(err && err.message ? err.message : err) });
+    console.error('FundRaja POST failure', err);
+    return response({ error: 'Request could not be completed.' });
   }
 }
 
