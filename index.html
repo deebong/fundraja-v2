@@ -1265,7 +1265,7 @@
             document.getElementById('captchaQ').innerText = `${n1} + ${n2} = ?`;
         }
 
-        async async function submitCampaign() {
+        async function submitCampaign() {
             if(parseInt(document.getElementById('cCaptcha').value) !== captchaAnswer) return showNotice('Math Check Failed');
             if(document.getElementById('cHp').value) return; 
             
@@ -1359,7 +1359,7 @@
             return result.url;
         }
 
-        async async function sendEmailVerificationCode() {
+        async function sendEmailVerificationCode() {
             const email = document.getElementById('eEmail').value.trim().toLowerCase();
             const status = document.getElementById('emailVerificationStatus');
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showNotice('Enter a valid email address first.'); return; }
