@@ -17,7 +17,7 @@ const PAYMENT_EVENT_HEADERS = [
 ];
 const DETECTOR_HEADERS = [
   'device_id', 'user_id', 'token_hash', 'created_at', 'revoked_at',
-  'last_seen_at', 'recipient_upi', 'enabled'
+  'last_seen_at', 'recipient_upi', 'enabled', 'device_name', 'last_event_at'
 ];
 
 function doGet(e) {
@@ -64,6 +64,7 @@ function doPost(e) {
     const action = String(data.action || '');
     // The detector endpoint authenticates before processing any event data.
     if (action === 'detector_event') return receiveDetectorEvent_(data);
+    if (action === 'detector_ping') return detectorPing_(getSpreadsheet_(), data);
 
     const ss = getSpreadsheet_();
 
@@ -289,10 +290,45 @@ function getDetectorStatus_(ss, data) {
   if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
   const sheet = ensureDetectorSheet_(ss);
   const rows = sheet.getDataRange().getValues();
-  const devices = rows.slice(1).filter(r => String(r[1]) === userId && String(r[7]).toUpperCase() === 'TRUE' && !r[4]).map(r => ({
-    deviceId: r[0], recipientUpi: r[6], createdAt: r[3], lastSeenAt: r[5] || null
+  const map = headerMap_(sheet);
+  const devices = rows.slice(1).filter(r =>
+    String(getByHeader_(r, map, 'user_id')) === userId &&
+    String(getByHeader_(r, map, 'enabled')).toUpperCase() === 'TRUE' &&
+    !getByHeader_(r, map, 'revoked_at')
+  ).map(r => ({
+    deviceId: getByHeader_(r, map, 'device_id'),
+    deviceName: String(getByHeader_(r, map, 'device_name') || ''),
+    recipientUpi: getByHeader_(r, map, 'recipient_upi'),
+    createdAt: getByHeader_(r, map, 'created_at'),
+    lastSeenAt: getByHeader_(r, map, 'last_seen_at') || null,
+    lastEventAt: getByHeader_(r, map, 'last_event_at') || null
   }));
   return response({ status: 'success', devices: devices });
+}
+
+function detectorPing_(ss, data) {
+  const token = String(data.token || '');
+  const deviceName = String(data.deviceName || '').trim().slice(0, 100);
+  const recipientUpi = String(data.recipientUpi || '').trim().toLowerCase();
+  if (!token || !deviceName || !recipientUpi) return response({ error: 'Missing detector token, device name, or recipient UPI ID' });
+  const sheet = ensureDetectorSheet_(ss);
+  const rows = sheet.getDataRange().getValues();
+  const map = headerMap_(sheet);
+  const tokenHash = sha256_(token);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (String(getByHeader_(row, map, 'token_hash')) !== tokenHash ||
+        String(getByHeader_(row, map, 'enabled')).toUpperCase() !== 'TRUE' ||
+        getByHeader_(row, map, 'revoked_at')) continue;
+    if (String(getByHeader_(row, map, 'recipient_upi') || '').trim().toLowerCase() !== recipientUpi) {
+      return response({ error: 'Recipient UPI does not match this paired device' });
+    }
+    const rowNumber = i + 1;
+    sheet.getRange(rowNumber, map.last_seen_at + 1).setValue(new Date());
+    sheet.getRange(rowNumber, map.device_name + 1).setValue(deviceName);
+    return response({ status: 'success', deviceId: getByHeader_(row, map, 'device_id'), deviceName: deviceName, checkedAt: new Date() });
+  }
+  return response({ error: 'Invalid or revoked detector token' });
 }
 
 function getCreatorDonations_(ss, data) {
@@ -438,6 +474,9 @@ function receiveDetectorEventLocked_(data) {
   const utr = parseNotificationUtr_(combined);
   const recipient = String(data.recipientUpi || device[6] || '').trim().toLowerCase();
   if (!recipient || recipient !== String(device[6] || '').trim().toLowerCase()) return response({ error: 'Recipient UPI does not match this paired device' });
+  const detectorMap = headerMap_(devices);
+  devices.getRange(deviceRowIndex, detectorMap.last_seen_at + 1).setValue(new Date());
+  devices.getRange(deviceRowIndex, detectorMap.last_event_at + 1).setValue(new Date());
   const postedAt = Number(data.postedAt) || Date.now();
   const campaignRows = ss.getSheetByName('Campaigns').getDataRange().getValues();
   const ownerCampaigns = campaignRows.filter((r, i) => i > 0 && String(r[11]) === String(device[1]) && String(r[5] || '').trim().toLowerCase() === recipient);
