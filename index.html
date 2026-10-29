@@ -216,6 +216,7 @@
         details.donation-row > summary::-webkit-details-marker { display:none; }
         details.donation-row > summary i { transition:transform .16s ease; }
         details.donation-row[open] > summary i { transform:rotate(180deg); }
+        details.donation-row[open] > summary i { transform:rotate(180deg); }
         @media (max-width: 640px) {
             details.donation-row > summary { align-items:flex-start !important; }
             details.donation-row > summary > span:last-child { white-space:nowrap; }
@@ -650,6 +651,21 @@
         </div>
     </div>
 
+    <div class="modal" id="editCampaignModal">
+        <div class="modal-content">
+            <div class="close-icon" onclick="closeModal('editCampaignModal')"><i class="ph ph-x"></i></div>
+            <div class="modal-scroll-area">
+                <h2 style="text-align:center;margin-bottom:16px;">Edit campaign</h2>
+                <input type="hidden" id="editCampaignId">
+                <div class="form-group"><label class="form-label">Campaign title</label><input id="editCampaignTitle" class="form-input" maxlength="150"></div>
+                <div class="form-group"><label class="form-label">Campaign story / updates</label><textarea id="editCampaignDesc" class="form-input" rows="5" maxlength="2000" placeholder="Share progress, updates or a thank-you note"></textarea></div>
+                <div class="form-group"><label class="form-label">Target amount (₹)</label><input id="editCampaignTarget" type="number" min="1" class="form-input"></div>
+                <div class="form-group"><label class="form-label">Thank-you note / rewards</label><textarea id="editCampaignRewards" class="form-input" rows="3" maxlength="2000"></textarea></div>
+                <div class="form-group"><label class="form-label">Replace campaign image (optional)</label><input id="editCampaignImage" type="file" class="form-input" accept="image/png,image/jpeg,image/webp"></div>
+                <button class="btn btn-primary" type="button" style="width:100%;" onclick="saveCampaignEdits()">Save changes</button>
+            </div>
+        </div>
+    </div>
     <div class="modal" id="editProfileModal">
         <div class="modal-content">
             <div class="close-icon" onclick="closeModal('editProfileModal')"><i class="ph ph-x"></i></div>
@@ -864,7 +880,7 @@
                             <span>${percent}%</span>
                         </div>
                         <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%; background:${colorVar}"></div></div>
-                        <button class="btn btn-outline" style="width:100%; border-radius:10px; height:40px; font-size:0.9rem;">Donate via UPI</button>
+                        <button class="btn btn-outline" style="width:100%; border-radius:10px; height:40px; font-size:0.9rem;">Donate via UPI</button>${containerId === 'appMyGrid' ? '<button type="button" class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="event.stopPropagation();editCampaign(\'' + String(camp.id).replace(/'/g, '') + '\')">Edit campaign</button>' : ''}
                     </div>
                 `;
                 container.appendChild(div);
@@ -1282,6 +1298,43 @@
             });
         }
 
+        function editCampaign(campaignId) {
+            const campaign = allCampaigns.find(item => String(item.id) === String(campaignId));
+            if (!campaign) return showNotice('Could not load this campaign. Refresh the page and try again.');
+            window.editingCampaign = campaign;
+            document.getElementById('editCampaignId').value = campaign.id;
+            document.getElementById('editCampaignTitle').value = campaign.title || '';
+            document.getElementById('editCampaignDesc').value = campaign.description || '';
+            document.getElementById('editCampaignTarget').value = campaign.target_amount || '';
+            document.getElementById('editCampaignRewards').value = campaign.rewards || '';
+            document.getElementById('editCampaignImage').value = '';
+            document.getElementById('editCampaignModal').style.display = 'flex';
+        }
+        async function saveCampaignEdits() {
+            const campaignId = document.getElementById('editCampaignId').value;
+            const title = document.getElementById('editCampaignTitle').value.trim();
+            const desc = document.getElementById('editCampaignDesc').value.trim();
+            const target = Number(document.getElementById('editCampaignTarget').value);
+            if (!title || !desc || !Number.isFinite(target) || target <= 0) return showNotice('Enter a title, story and valid target amount.');
+            const btn = document.querySelector('#editCampaignModal .btn-primary');
+            btn.disabled = true; btn.innerText = 'Saving…';
+            try {
+                const imageUrl = await uploadImageFile('editCampaignImage', 'campaign');
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'updateCampaign', userId:session.userId, sessionToken:session.sessionToken,
+                    campaignId:campaignId, title:title, desc:desc, target:target,
+                    rewards:document.getElementById('editCampaignRewards').value, imageUrl:imageUrl || undefined
+                })}).then(r=>r.json());
+                if (res.status !== 'success') throw new Error(res.error || 'Could not update campaign.');
+                closeModal('editCampaignModal');
+                showNotice('Campaign updated successfully.');
+                localStorage.removeItem(CACHE_KEY);
+                await fetchRemote(false);
+                showProfile(true, session.name);
+            } catch(e) { showNotice(e.message || 'Could not update campaign.'); }
+            finally { btn.disabled = false; btn.innerText = 'Save changes'; }
+        }
+
         function readImageAsDataUrl(file) {
             return new Promise((resolve, reject) => {
                 if (!file) return resolve('');
@@ -1433,7 +1486,7 @@
             if(!session || !session.userId) return openLogin();
             const recipientUpi = (document.getElementById('detectorUpiInput')?.value || '').trim();
             if(!recipientUpi) return showNotice('Enter the recipient UPI ID used by one of your campaigns.');
-            if(!confirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.'))) return;
+            if(!(await showConfirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.'))) return;
             const btn = document.querySelector('button[onclick="pairPaymentDetector()"]');
             const oldText = btn ? btn.innerText : '';
             window.detectorPairingRequestInProgress = true;
@@ -1553,7 +1606,7 @@
                     return `<details class="donation-row" style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>Donation claim</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
-                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><i class="ph ph-caret-down" aria-hidden="true" style="font-size:1.05rem;color:var(--text-gray);transition:transform .16s;"></i></span>
                         </summary>
                         <div style="padding:0 0 14px;">
                             <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
