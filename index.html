@@ -638,7 +638,7 @@
             <div class="modal-scroll-area">
                 <h2 style="text-align:center; margin-bottom:10px;">Login</h2>
                 <div class="form-group"><label class="form-label">Phone Number</label><input type="tel" id="lPhone" class="form-input" placeholder="10-digit number" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')"></div>
-                <div class="form-group"><label class="form-label">6-Digit PIN</label><div class="password-wrapper"><input type="password" id="lPin" class="form-input" maxlength="6" placeholder="******" oninput="this.value = this.value.replace(/[^0-9]/g, '')"><span class="password-toggle" onclick="togglePin('lPin', this)"><i class="ph ph-eye"></i></span></div></div>
+                <div class="form-group"><label class="form-label">PIN</label><div class="password-wrapper"><input type="password" id="lPin" class="form-input" maxlength="12" placeholder="Enter your PIN" oninput="this.value = this.value.replace(/[^0-9]/g, '')"><span class="password-toggle" onclick="togglePin('lPin', this)"><i class="ph ph-eye"></i></span></div></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="handleLogin()">Login</button>
                 <div style="margin:20px 0; text-align:center; border-top:1px solid #eee;"><span style="background:white; padding:0 10px; position:relative; top:-12px; color:#999; font-size:0.85rem; font-weight:600;">OR CONTINUE WITH</span></div>
                 <div style="display:flex; justify-content:center;">
@@ -657,7 +657,7 @@
                 <h2 style="text-align:center; margin-bottom:10px;">Sign Up</h2>
                 <div class="form-group"><label class="form-label">Name</label><input type="text" id="sName" class="form-input"></div>
                 <div class="form-group"><label class="form-label">Phone Number</label><input type="tel" id="sPhone" class="form-input" maxlength="10" placeholder="10-digit number" oninput="this.value = this.value.replace(/[^0-9]/g, '')"></div>
-                <div class="form-group"><label class="form-label">PIN</label><div class="password-wrapper"><input type="password" id="sPin" class="form-input" maxlength="6" placeholder="******" oninput="this.value = this.value.replace(/[^0-9]/g, '')"><span class="password-toggle" onclick="togglePin('sPin', this)"><i class="ph ph-eye"></i></span></div></div>
+                <div class="form-group"><label class="form-label">8–12 Digit PIN</label><div class="password-wrapper"><input type="password" id="sPin" class="form-input" maxlength="12" minlength="8" placeholder="8–12 digits" oninput="this.value = this.value.replace(/[^0-9]/g, '')"><span class="password-toggle" onclick="togglePin('sPin', this)"><i class="ph ph-eye"></i></span></div></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="handleSignup()">Create Account</button>
                 <p style="text-align:center; margin-top:15px; font-size:0.9rem; cursor:pointer; color:var(--primary); font-weight:600;" onclick="switchToLogin()">Existing User? Login</p>
             </div>
@@ -725,7 +725,7 @@
                 <hr style="margin:10px 0; border:0; border-top:1px solid #E2E8F0;">
                 <label class="form-label">Link Credentials (Optional)</label>
                 <div class="form-group"><input type="tel" id="ePhone" class="form-input" placeholder="10-digit Phone" maxlength="10"></div>
-                <div class="form-group"><input type="password" id="ePin" class="form-input" maxlength="6" placeholder="Set 6-digit PIN"></div>
+                <div class="form-group"><input type="password" id="ePin" class="form-input" maxlength="12" minlength="8" placeholder="Set 8–12 digit PIN"></div>
 
                 <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="handleUpdateProfile()">Save Changes</button>
             </div>
