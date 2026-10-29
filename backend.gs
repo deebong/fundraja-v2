@@ -104,6 +104,7 @@ function doPost(e) {
 
     // --- IMAGE UPLOAD ---
     if (action === 'upload_image') {
+      if (rateLimitExceeded_('upload_image:' + String(data.userId || ''), 10, 3600)) return response({ error: 'Too many image uploads. Try again later.' });
       const userId = String(data.userId || '');
       if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       if (!data.image || !DRIVE_FOLDER_ID) return response({ error: 'Image storage is not configured or image data is missing.' });
@@ -226,6 +227,7 @@ function doPost(e) {
       return response({ status: 'success', message: 'Verification code sent. Check your inbox.' });
     }
     if (action === 'verify_email_code') {
+      if (rateLimitExceeded_('verify_email_code:' + String(data.userId || ''), 8, 600)) return response({ error: 'Too many code attempts. Request a new code later.' });
       const userId = String(data.userId || '');
       if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       const stored = CacheService.getScriptCache().get('email_verify_' + userId);
@@ -278,7 +280,10 @@ function doPost(e) {
     }
 
     // Donor submission creates a pending claim only. It does not increase raised_amount.
-    if (action === 'donate') return submitDonation_(ss, data);
+    if (action === 'donate') {
+      if (rateLimitExceeded_('donate:' + sha256_(String(data.campId || '') + ':' + String(data.ref || '')), 3, 600)) return response({ error: 'Too many repeated donation submissions. Wait before retrying.' });
+      return submitDonation_(ss, data);
+    }
 
     if (action === 'pair_detector') return pairDetector_(ss, data);
     if (action === 'revoke_detector') return revokeDetector_(ss, data);
@@ -397,6 +402,7 @@ function getDetectorStatus_(ss, data) {
 }
 
 function detectorPing_(ss, data) {
+  if (rateLimitExceeded_('detector_ping:' + sha256_(String(data.token || '')), 20, 900)) return response({ error: 'Too many device checks. Try again later.' });
   const token = String(data.token || '');
   const deviceName = String(data.deviceName || '').trim().slice(0, 100);
   const recipientUpi = String(data.recipientUpi || '').trim().toLowerCase();
@@ -540,6 +546,7 @@ function acknowledgeDonation_(ss, data) {
 }
 
 function receiveDetectorEvent_(data) {
+  if (rateLimitExceeded_('detector_event:' + sha256_(String(data.token || '')), 60, 3600)) return response({ error: 'Too many detector events. Try again later.' });
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
