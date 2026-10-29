@@ -216,6 +216,7 @@
         details.donation-row > summary::-webkit-details-marker { display:none; }
         details.donation-row > summary i { transition:transform .16s ease; }
         details.donation-row[open] > summary i { transform:rotate(180deg); }
+        details.donation-row[open] > summary i { transform:rotate(180deg); }
         @media (max-width: 640px) {
             details.donation-row > summary { align-items:flex-start !important; }
             details.donation-row > summary > span:last-child { white-space:nowrap; }
@@ -650,6 +651,21 @@
         </div>
     </div>
 
+    <div class="modal" id="editCampaignModal">
+        <div class="modal-content">
+            <div class="close-icon" onclick="closeModal('editCampaignModal')"><i class="ph ph-x"></i></div>
+            <div class="modal-scroll-area">
+                <h2 style="text-align:center;margin-bottom:16px;">Edit campaign</h2>
+                <input type="hidden" id="editCampaignId">
+                <div class="form-group"><label class="form-label">Campaign title</label><input id="editCampaignTitle" class="form-input" maxlength="150"></div>
+                <div class="form-group"><label class="form-label">Campaign story / updates</label><textarea id="editCampaignDesc" class="form-input" rows="5" maxlength="2000" placeholder="Share progress, updates or a thank-you note"></textarea></div>
+                <div class="form-group"><label class="form-label">Target amount (₹)</label><input id="editCampaignTarget" type="number" min="1" class="form-input"></div>
+                <div class="form-group"><label class="form-label">Thank-you note / rewards</label><textarea id="editCampaignRewards" class="form-input" rows="3" maxlength="2000"></textarea></div>
+                <div class="form-group"><label class="form-label">Replace campaign image (optional)</label><input id="editCampaignImage" type="file" class="form-input" accept="image/png,image/jpeg,image/webp"></div>
+                <button class="btn btn-primary" type="button" style="width:100%;" onclick="saveCampaignEdits()">Save changes</button>
+            </div>
+        </div>
+    </div>
     <div class="modal" id="editProfileModal">
         <div class="modal-content">
             <div class="close-icon" onclick="closeModal('editProfileModal')"><i class="ph ph-x"></i></div>
@@ -657,9 +673,11 @@
                 <h2 style="text-align:center; margin-bottom:10px;">Edit Profile</h2>
                 
                 <div class="form-group">
-                    <label class="form-label">Gmail (Optional)</label><input type="email" id="eEmail" class="form-input" placeholder="you@gmail.com">
-                    <div id="emailVerificationStatus" style="font-size:.85rem;color:var(--text-gray);margin-top:6px;">Email is not verified.</div>
-                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn btn-outline" type="button" onclick="sendEmailVerificationCode()">Send verification code</button><input id="eEmailCode" class="form-input" inputmode="numeric" maxlength="6" placeholder="6-digit code" style="max-width:150px;"><button class="btn btn-outline" type="button" onclick="verifyEmailCode()">Verify</button></div>
+                    <label class="form-label">Email address (Optional)</label>
+                    <div style="display:flex;align-items:center;gap:8px;"><input type="email" id="eEmail" class="form-input" placeholder="you@example.com" oninput="syncEmailVerificationUI()" style="flex:1;min-width:0;"><span id="emailVerifiedTick" title="Verified email" style="display:none;color:#16A34A;font-size:1.4rem;"><i class="ph ph-check-circle-fill"></i></span></div>
+                    <div id="emailVerificationStatus" style="font-size:.85rem;color:var(--text-gray);margin-top:6px;">Add an email address to verify it.</div>
+                    <button class="btn btn-outline" id="editEmailButton" type="button" onclick="enableEmailEditing()" style="display:none;margin-top:8px;">Edit email</button>
+                    <div id="emailVerificationControls" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn btn-outline" type="button" onclick="sendEmailVerificationCode()">Send verification code</button><input id="eEmailCode" class="form-input" inputmode="numeric" maxlength="6" placeholder="6-digit code" style="max-width:150px;"><button class="btn btn-outline" type="button" onclick="verifyEmailCode()">Verify</button></div>
                 </div>
                 <div class="form-group"><label class="form-label">Profile photo</label><input type="file" id="eProfilePhoto" class="form-input" accept="image/png,image/jpeg,image/webp"><small style="color:var(--text-gray);">PNG, JPG or WebP. Use a small image.</small></div>
                 <div class="form-group"><label class="form-label">About Me</label><textarea id="eAbout" class="form-input" rows="3"></textarea></div>
@@ -862,7 +880,7 @@
                             <span>${percent}%</span>
                         </div>
                         <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%; background:${colorVar}"></div></div>
-                        <button class="btn btn-outline" style="width:100%; border-radius:10px; height:40px; font-size:0.9rem;">Donate via UPI</button>
+                        <button class="btn btn-outline" style="width:100%; border-radius:10px; height:40px; font-size:0.9rem;">Donate via UPI</button>${containerId === 'appMyGrid' ? '<button type="button" class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="event.stopPropagation();editCampaign(\'' + String(camp.id).replace(/'/g, '') + '\')">Edit campaign</button>' : ''}
                     </div>
                 `;
                 container.appendChild(div);
@@ -935,7 +953,7 @@
         async function showProfile(isMine, userName) {
             // Strict Auth Check for Profiles
             if(!session) {
-                alert("Please login to view profiles.");
+                showNotice("Please login to view profiles.");
                 openLogin();
                 return;
             }
@@ -1165,7 +1183,61 @@
                 }
                 const previous = button.innerText; button.innerText = 'Copied';
                 setTimeout(() => button.innerText = previous, 1400);
-            } catch (e) { alert('Could not copy automatically. Select and copy the command manually.'); }
+            } catch (e) { showNotice('Could not copy automatically. Select and copy the command manually.'); }
+        }
+
+        function showNotice(message, options = {}) {
+            const modal = document.getElementById('appNoticeModal');
+            if (!modal) { console.error(message); return; }
+            document.getElementById('appNoticeTitle').innerText = options.title || 'FundRaja';
+            document.getElementById('appNoticeMessage').innerText = String(message || '');
+            document.getElementById('appNoticeCancel').style.display = 'none';
+            document.getElementById('appNoticeOk').innerText = options.okText || 'OK';
+            modal.style.display = 'flex';
+            modal.dataset.mode = 'notice';
+            modal._resolve = null;
+        }
+        function showConfirm(message) {
+            return new Promise(resolve => {
+                const modal = document.getElementById('appNoticeModal');
+                document.getElementById('appNoticeTitle').innerText = 'Please confirm';
+                document.getElementById('appNoticeMessage').innerText = String(message || '');
+                document.getElementById('appNoticeCancel').style.display = 'inline-flex';
+                document.getElementById('appNoticeOk').innerText = 'Continue';
+                modal.style.display = 'flex';
+                modal.dataset.mode = 'confirm';
+                modal._resolve = resolve;
+            });
+        }
+        function resolveAppNotice(value) {
+            const modal = document.getElementById('appNoticeModal');
+            modal.style.display = 'none';
+            if (typeof modal._resolve === 'function') modal._resolve(!!value);
+            modal._resolve = null;
+        }
+        function syncEmailVerificationUI() {
+            const verified = !!(currentProfileData && currentProfileData.email_verified && currentProfileData.email &&
+                currentProfileData.email.toLowerCase() === document.getElementById('eEmail').value.trim().toLowerCase());
+            const email = document.getElementById('eEmail');
+            const row = document.getElementById('emailVerificationControls');
+            const tick = document.getElementById('emailVerifiedTick');
+            if (tick) tick.style.display = verified ? 'inline-flex' : 'none';
+            if (row) row.style.display = verified ? 'none' : 'flex';
+            if (email) email.style.borderColor = verified ? '#16A34A' : '';
+            const status = document.getElementById('emailVerificationStatus');
+            if (status) status.innerText = verified ? 'Email verified' : (email.value.trim() ? 'Email not verified' : 'Add an email address to verify it.');
+            const edit = document.getElementById('editEmailButton');
+            if (edit) edit.style.display = verified ? 'inline-flex' : 'none';
+            if (email) email.readOnly = verified;
+        }
+        function enableEmailEditing() {
+            const email = document.getElementById('eEmail');
+            email.readOnly = false;
+            email.focus();
+            document.getElementById('editEmailButton').style.display = 'none';
+            document.getElementById('emailVerificationControls').style.display = 'flex';
+            document.getElementById('emailVerifiedTick').style.display = 'none';
+            document.getElementById('emailVerificationStatus').innerText = 'Update the address, then verify it.';
         }
 
         // --- MODAL UTILS ---
@@ -1193,8 +1265,8 @@
             document.getElementById('captchaQ').innerText = `${n1} + ${n2} = ?`;
         }
 
-        async function submitCampaign() {
-            if(parseInt(document.getElementById('cCaptcha').value) !== captchaAnswer) return alert('Math Check Failed');
+        async async function submitCampaign() {
+            if(parseInt(document.getElementById('cCaptcha').value) !== captchaAnswer) return showNotice('Math Check Failed');
             if(document.getElementById('cHp').value) return; 
             
             const btn = document.querySelector('#createModal .btn-primary');
@@ -1202,7 +1274,7 @@
             
             let imageUrl = '';
             try { imageUrl = await uploadImageFile('cImage', 'campaign'); }
-            catch (e) { btn.innerText = 'Launch Campaign'; alert(e.message || 'Could not upload campaign image.'); return; }
+            catch (e) { btn.innerText = 'Launch Campaign'; showNotice(e.message || 'Could not upload campaign image.'); return; }
             const data = {
                 action: 'createCampaign',
                 imageUrl:imageUrl,
@@ -1214,16 +1286,54 @@
                 endDate: document.getElementById('cDate').value,
                 upi: document.getElementById('cUpi').value,
                 creator: session.name,
-                userId: session.userId
+                userId: session.userId,
+                sessionToken: session.sessionToken
             };
 
             fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(data) })
             .then(r => r.json())
             .then(res => {
-                alert('Campaign Created! Pending Approval.');
+                showNotice('Campaign Created! Pending Approval.');
                 localStorage.removeItem(CACHE_KEY);
                 location.reload(); 
             });
+        }
+
+        function editCampaign(campaignId) {
+            const campaign = allCampaigns.find(item => String(item.id) === String(campaignId));
+            if (!campaign) return showNotice('Could not load this campaign. Refresh the page and try again.');
+            window.editingCampaign = campaign;
+            document.getElementById('editCampaignId').value = campaign.id;
+            document.getElementById('editCampaignTitle').value = campaign.title || '';
+            document.getElementById('editCampaignDesc').value = campaign.description || '';
+            document.getElementById('editCampaignTarget').value = campaign.target_amount || '';
+            document.getElementById('editCampaignRewards').value = campaign.rewards || '';
+            document.getElementById('editCampaignImage').value = '';
+            document.getElementById('editCampaignModal').style.display = 'flex';
+        }
+        async function saveCampaignEdits() {
+            const campaignId = document.getElementById('editCampaignId').value;
+            const title = document.getElementById('editCampaignTitle').value.trim();
+            const desc = document.getElementById('editCampaignDesc').value.trim();
+            const target = Number(document.getElementById('editCampaignTarget').value);
+            if (!title || !desc || !Number.isFinite(target) || target <= 0) return showNotice('Enter a title, story and valid target amount.');
+            const btn = document.querySelector('#editCampaignModal .btn-primary');
+            btn.disabled = true; btn.innerText = 'Saving…';
+            try {
+                const imageUrl = await uploadImageFile('editCampaignImage', 'campaign');
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'updateCampaign', userId:session.userId, sessionToken:session.sessionToken,
+                    campaignId:campaignId, title:title, desc:desc, target:target,
+                    rewards:document.getElementById('editCampaignRewards').value, imageUrl:imageUrl || undefined
+                })}).then(r=>r.json());
+                if (res.status !== 'success') throw new Error(res.error || 'Could not update campaign.');
+                closeModal('editCampaignModal');
+                showNotice('Campaign updated successfully.');
+                localStorage.removeItem(CACHE_KEY);
+                await fetchRemote(false);
+                showProfile(true, session.name);
+            } catch(e) { showNotice(e.message || 'Could not update campaign.'); }
+            finally { btn.disabled = false; btn.innerText = 'Save changes'; }
         }
 
         function readImageAsDataUrl(file) {
@@ -1249,17 +1359,17 @@
             return result.url;
         }
 
-        async function sendEmailVerificationCode() {
+        async async function sendEmailVerificationCode() {
             const email = document.getElementById('eEmail').value.trim().toLowerCase();
             const status = document.getElementById('emailVerificationStatus');
-            if (!/^[^\s@]+@gmail\.com$/i.test(email)) { alert('Enter a valid Gmail address first.'); return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showNotice('Enter a valid email address first.'); return; }
             status.innerText = 'Sending verification code…';
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
                     action:'send_email_verification', userId:session.userId, sessionToken:session.sessionToken, email:email
                 })}).then(r=>r.json());
                 status.innerText = res.message || res.error || 'Unable to send code.';
-                if (res.status !== 'success') alert(res.error || 'Unable to send verification code.');
+                if (res.status !== 'success') showNotice(res.error || 'Unable to send verification code.');
             } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
         }
 
@@ -1267,7 +1377,7 @@
             const email = document.getElementById('eEmail').value.trim().toLowerCase();
             const code = document.getElementById('eEmailCode').value.trim();
             const status = document.getElementById('emailVerificationStatus');
-            if (!/^\d{6}$/.test(code)) { alert('Enter the 6-digit code sent to your Gmail.'); return; }
+            if (!/^\d{6}$/.test(code)) { showNotice('Enter the 6-digit code sent to your Gmail.'); return; }
             status.innerText = 'Verifying…';
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
@@ -1275,23 +1385,25 @@
                 })}).then(r=>r.json());
                 status.innerText = res.message || res.error || 'Unable to verify email.';
                 if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); renderProfileDataToContainer(currentProfileData, 'appProf'); }
-                else alert(res.error || 'Email verification failed.');
+                else showNotice(res.error || 'Email verification failed.');
             } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
         }
 
         function openEditProfile() {
             document.getElementById('editProfileModal').style.display = 'flex';
+            syncEmailVerificationUI();
             if(currentProfileData) {
                 document.getElementById('eAbout').value = currentProfileData.about || '';
                 document.getElementById('eEmail').value = currentProfileData.email || '';
                 document.getElementById('emailVerificationStatus').innerText = currentProfileData.email_verified ? 'Email verified' : 'Email is not verified.';
+                syncEmailVerificationUI();
             }
         }
 
         async function handleUpdateProfile() {
             let photoUrl = '';
             try { photoUrl = await uploadImageFile('eProfilePhoto', 'profile'); }
-            catch (e) { alert(e.message || 'Could not upload profile photo.'); return; }
+            catch (e) { showNotice(e.message || 'Could not upload profile photo.'); return; }
             const payload = {
                 action: 'update_profile', userId: session.userId, sessionToken: session.sessionToken,
                 photoUrl: photoUrl || undefined,
@@ -1311,14 +1423,14 @@
                     closeModal('editProfileModal');
                     currentProfileData = null; 
                     showProfile(true, session.name);
-                } else alert(res.error);
+                } else showNotice(res.error);
             });
         }
 
         function openDonateModalFromDetails() {
             if(!session) return openLogin();
             const remainingAmount = Math.max(0, (Number(currentDetails.target_amount) || 0) - (Number(currentDetails.raised_amount) || 0));
-            if (remainingAmount <= 0) return alert('This campaign has reached its target.');
+            if (remainingAmount <= 0) return showNotice('This campaign has reached its target.');
             document.getElementById('dTitle').innerText = currentDetails.title;
             document.getElementById('dName').value = session.name;
             const target = Math.max(0, Number(currentDetails.target_amount) || 0);
@@ -1342,8 +1454,8 @@
             const amount = Number(document.getElementById('dAmount').value);
             const utr = document.getElementById('dRef').value.trim();
             const donor = document.getElementById('dName').value.trim() || session.name;
-            if(!Number.isFinite(amount) || amount <= 0) return alert('Enter a valid donation amount');
-            if(!/^\d{12}$/.test(utr)) return alert('UTR must contain exactly 12 digits');
+            if(!Number.isFinite(amount) || amount <= 0) return showNotice('Enter a valid donation amount');
+            if(!/^\d{12}$/.test(utr)) return showNotice('UTR must contain exactly 12 digits');
             const btn = document.querySelector('#donateModal .btn-primary');
             const oldText = btn.innerText;
             btn.disabled = true;
@@ -1353,15 +1465,15 @@
                     action: 'donate', campId: currentDetails.id, amount: amount, donor: donor, ref: utr, userId: session?.userId, sessionToken: session?.sessionToken
                 })}).then(r => r.json());
                 if(res.status === 'success') {
-                    alert('Donation claim saved. It is pending until the creator confirms receipt.');
+                    showNotice('Donation claim saved. It is pending until the creator confirms receipt.');
                     closeModal('donateModal');
                     localStorage.removeItem(CACHE_KEY);
                     await fetchRemote(false);
                 } else {
-                    alert(res.error || 'Could not submit donation claim.');
+                    showNotice(res.error || 'Could not submit donation claim.');
                 }
             } catch(e) {
-                alert('Network error while submitting the donation claim. Please try again.');
+                showNotice('Network error while submitting the donation claim. Please try again.');
             } finally {
                 btn.disabled = false;
                 btn.innerText = oldText;
@@ -1374,15 +1486,15 @@
             if (window.detectorPairingRequestInProgress) return;
             if(!session || !session.userId) return openLogin();
             const recipientUpi = (document.getElementById('detectorUpiInput')?.value || '').trim();
-            if(!recipientUpi) return alert('Enter the recipient UPI ID used by one of your campaigns.');
-            if(!confirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.')) return;
+            if(!recipientUpi) return showNotice('Enter the recipient UPI ID used by one of your campaigns.');
+            if(!(await showConfirm('Create a pairing QR for ' + recipientUpi + '? Your currently connected phone will remain active unless and until the new phone successfully registers. Closing the QR will not revoke the current phone.'))) return;
             const btn = document.querySelector('button[onclick="pairPaymentDetector()"]');
             const oldText = btn ? btn.innerText : '';
             window.detectorPairingRequestInProgress = true;
             if(btn) { btn.disabled = true; btn.innerText = 'Creating QR...'; }
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'pair_detector', userId:session.userId, sessionToken:session.sessionToken, recipientUpi }) }).then(r=>r.json());
-                if(res.status !== 'success') return alert(res.error || 'Could not pair detector.');
+                if(res.status !== 'success') return showNotice(res.error || 'Could not pair detector.');
                 showDetectorPairingQr({
                     type: 'openupi-pairing',
                     version: 1,
@@ -1391,7 +1503,7 @@
                     recipientUpi: res.recipientUpi
                 });
                 loadDetectorStatus();
-            } catch(e) { alert('Network error while creating pairing token.'); }
+            } catch(e) { showNotice('Network error while creating pairing token.'); }
             finally {
                 window.detectorPairingRequestInProgress = false;
                 if(btn) { btn.disabled = false; btn.innerText = oldText; }
@@ -1495,7 +1607,7 @@
                     return `<details class="donation-row" style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>Donation claim</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
-                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><i class="ph ph-caret-down" aria-hidden="true" style="font-size:1.05rem;color:var(--text-gray);transition:transform .16s;"></i></span>
                         </summary>
                         <div style="padding:0 0 14px;">
                             <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
@@ -1512,16 +1624,16 @@
 
         async function acknowledgeDonation(encodedDonationId) {
             const donationId = decodeURIComponent(encodedDonationId);
-            if(!confirm('Confirm that you have checked your UPI/bank record and received this payment? The campaign total will increase once.')) return;
+            if(!(await showConfirm('Confirm that you have checked your UPI/bank record and received this payment? The campaign total will increase once.'))) return;
             try {
                 const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({ action:'acknowledge_donation', userId:session.userId, sessionToken:session.sessionToken, donationId }) }).then(r=>r.json());
-                if(res.status !== 'success') return alert(res.error || 'Could not acknowledge donation.');
-                alert(res.message || 'Acknowledgement saved.');
+                if(res.status !== 'success') return showNotice(res.error || 'Could not acknowledge donation.');
+                showNotice(res.message || 'Acknowledgement saved.');
                 localStorage.removeItem(CACHE_KEY);
                 await fetchRemote(false);
                 await loadCreatorDonations();
                 showProfile(true, session.name);
-            } catch(e) { alert('Network error while acknowledging payment.'); }
+            } catch(e) { showNotice('Network error while acknowledging payment.'); }
         }
 
         // --- AUTH ---
@@ -1533,14 +1645,14 @@
                         session={userId:d.userId, name:d.name, sessionToken:d.sessionToken};
                         localStorage.setItem('fundflow_session', JSON.stringify(session));
                         closeModal('loginModal'); checkSession();
-                    } else alert('Login Failed: '+d.error);
+                    } else showNotice('Login Failed: '+d.error);
                 });
             } catch(e) { console.error(e); }
         }
 
         function handleLogin() {
             const p = document.getElementById('lPhone').value, pin = document.getElementById('lPin').value;
-            if(!p || !pin) return alert('Enter details');
+            if(!p || !pin) return showNotice('Enter details');
             
             const btn = document.querySelector('#loginModal .btn-primary');
             const txt = btn.innerText; btn.innerText="Verifying...";
@@ -1552,7 +1664,7 @@
                     session={userId:d.userId, name:d.name, sessionToken:d.sessionToken};
                     localStorage.setItem('fundflow_session', JSON.stringify(session));
                     closeModal('loginModal'); checkSession();
-                } else alert(d.error);
+                } else showNotice(d.error);
             });
         }
 
@@ -1560,7 +1672,7 @@
             const name = document.getElementById('sName').value;
             const phone = document.getElementById('sPhone').value;
             const pin = document.getElementById('sPin').value;
-            if(!name || !phone || !pin) return alert('Fill all fields');
+            if(!name || !phone || !pin) return showNotice('Fill all fields');
             
             const btn = document.querySelector('#signupModal .btn-primary');
             btn.innerText="Creating...";
@@ -1572,7 +1684,7 @@
                     session={userId:d.userId, name:d.name, sessionToken:d.sessionToken};
                     localStorage.setItem('fundflow_session', JSON.stringify(session));
                     closeModal('signupModal'); checkSession();
-                } else alert(d.error);
+                } else showNotice(d.error);
             });
         }
 
@@ -1587,5 +1699,18 @@
             window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + window.location.href)}`);
         }
     </script>
+    <div class="modal" id="appNoticeModal" style="z-index:20000;">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-scroll-area" style="padding:24px;">
+                <h3 id="appNoticeTitle" style="margin-bottom:10px;">FundRaja</h3>
+                <p id="appNoticeMessage" style="color:var(--text-gray);white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:20px;"></p>
+                <div style="display:flex;justify-content:flex-end;gap:10px;">
+                    <button class="btn btn-outline" id="appNoticeCancel" type="button" onclick="resolveAppNotice(false)" style="display:none;">Cancel</button>
+                    <button class="btn btn-primary" id="appNoticeOk" type="button" onclick="resolveAppNotice(true)">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

@@ -1,3 +1,20 @@
+function authorizeFundRajaServices() {
+  // Run once manually in Apps Script as the deployment owner to authorize email and Drive access.
+  const remainingEmailQuota = MailApp.getRemainingDailyQuota();
+  getFundRajaImageFolder_();
+  return { emailQuota: remainingEmailQuota, driveReady: true };
+}
+function getFundRajaImageFolder_() {
+  if (DRIVE_FOLDER_ID) return DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  const props = PropertiesService.getScriptProperties();
+  const key = 'FUNDRaja_IMAGE_FOLDER_ID';
+  let id = props.getProperty(key);
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const folder = DriveApp.createFolder('FundRaja Public Images');
+  props.setProperty(key, folder.getId());
+  return folder;
+}
+
 // FundRaja Google Apps Script backend
 // Payment detection MVP: notification evidence is never treated as bank-level proof.
 
@@ -79,7 +96,7 @@ function doPost(e) {
       const purpose = data.purpose === 'campaign' ? 'campaign' : 'profile';
       const contentType = parts[0].split(':')[1].split(';')[0];
       const blob = Utilities.newBlob(Utilities.base64Decode(parts[1]), contentType, userId + '_' + purpose + '_' + Date.now());
-      const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+      const folder = getFundRajaImageFolder_();
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       return response({ status: 'success', url: 'https://lh3.googleusercontent.com/d/' + file.getId() });
@@ -180,7 +197,7 @@ function doPost(e) {
       const userId = String(data.userId || '');
       if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       const email = String(data.email || '').trim().toLowerCase();
-      if (!/^[^\s@]+@gmail\.com$/i.test(email)) return response({ error: 'Enter a valid Gmail address.' });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response({ error: 'Enter a valid email address.' });
       const userSheet = ss.getSheetByName('Users');
       const users = userSheet.getDataRange().getValues();
       const rowIndex = users.findIndex((row, i) => i > 0 && String(row[0]) === userId) + 1;
@@ -212,7 +229,7 @@ function doPost(e) {
     // --- CAMPAIGN ACTIONS ---
     if (action === 'createCampaign') {
       const userId = String(data.userId || '');
-      if (!userId) return response({ error: 'User ID required' });
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       if (!data.title || String(data.title).length > 150) return response({ error: 'Title invalid or too long' });
       if (!data.desc || String(data.desc).length > 2000) return response({ error: 'Description invalid or too long' });
       const cache = CacheService.getScriptCache();
@@ -220,10 +237,28 @@ function doPost(e) {
       if (cache.get(key)) return response({ error: 'Rate limit exceeded. Please wait 10 minutes before posting again.' });
       const sheet = ss.getSheetByName('Campaigns');
       if (sheet.getLastColumn() < 13) sheet.getRange(1, 13).setValue('image_url');
+      else if (!String(sheet.getRange(1, 13).getValue() || '').trim()) sheet.getRange(1, 13).setValue('image_url');
       const id = 'CMP-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase();
       sheet.appendRow([id, data.title, data.desc, Number(data.target) || 0, 0, data.upi, data.creator, data.category, data.endDate, data.rewards, 'Pending', userId, String(data.imageUrl || '')]);
       cache.put(key, 'true', 600);
       return response({ status: 'success', id: id });
+    }
+
+    if (action === 'updateCampaign') {
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+      const sheet = ss.getSheetByName('Campaigns');
+      if (!sheet || sheet.getLastRow() < 2) return response({ error: 'Campaign not found.' });
+      const rows = sheet.getDataRange().getValues();
+      const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[0]) === String(data.campaignId) && String(row[11]) === userId);
+      if (rowIndex < 1) return response({ error: 'Campaign not found or you do not own it.' });
+      const row = rowIndex + 1;
+      if (data.title !== undefined) sheet.getRange(row, 2).setValue(String(data.title).slice(0,150));
+      if (data.desc !== undefined) sheet.getRange(row, 3).setValue(String(data.desc).slice(0,2000));
+      if (data.target !== undefined && Number(data.target) > 0) sheet.getRange(row, 4).setValue(Number(data.target));
+      if (data.rewards !== undefined) sheet.getRange(row, 10).setValue(String(data.rewards).slice(0,2000));
+      if (data.imageUrl !== undefined && sheet.getLastColumn() >= 13) sheet.getRange(row, 13).setValue(String(data.imageUrl));
+      return response({ status: 'success' });
     }
 
     // Donor submission creates a pending claim only. It does not increase raised_amount.
