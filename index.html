@@ -1110,7 +1110,9 @@
 
         async function fetchProfileData(uid) {
             try {
-                const res = await fetch(`${APPS_SCRIPT_URL}?op=getProfile&uid=${uid}`);
+                const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify({
+                    action: 'get_my_profile', userId: uid, sessionToken: session && session.sessionToken
+                })});
                 const json = await res.json();
                 if(json.status === 'success') currentProfileData = json.data;
             } catch(e){}
@@ -1130,21 +1132,27 @@
             if(aboutEl) aboutEl.innerText = data.about || 'No bio added.';
             
             let badges = '';
-            if(data.email && data.email_verified) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Email verified</span>`;
-            if(data.phone) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Phone</span>`;
+            if(data.email_verified) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Email verified</span>`;
+            if(prefix === 'appProf' && data.phone) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Phone</span>`;
             if(badgesEl) badgesEl.innerHTML = badges;
 
             if(data.socials && socialsEl) {
                 const links = data.socials.split(',');
                 let html = '';
-                links.forEach(l => {
+                links.forEach(rawLink => {
+                    const value = rawLink.trim();
+                    if (!value || value.length > 500) return;
+                    let parsed;
+                    try { parsed = new URL(value); } catch (_) { return; }
+                    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return;
+                    const safeLink = escapeHtml(parsed.href);
+                    const host = parsed.hostname.toLowerCase();
                     let label = "Link";
-                    if(l.includes('facebook')) label = "Facebook";
-                    else if(l.includes('twitter') || l.includes('x.com')) label = "Twitter";
-                    else if(l.includes('instagram')) label = "Instagram";
-                    else if(l.includes('linkedin')) label = "LinkedIn";
-                    
-                    if(l) html += `<a href="${l}" target="_blank" class="social-chip"><i class="ph ph-link"></i> ${label}</a>`;
+                    if(host === 'facebook.com' || host.endsWith('.facebook.com')) label = "Facebook";
+                    else if(host === 'twitter.com' || host.endsWith('.twitter.com') || host === 'x.com' || host.endsWith('.x.com')) label = "X / Twitter";
+                    else if(host === 'instagram.com' || host.endsWith('.instagram.com')) label = "Instagram";
+                    else if(host === 'linkedin.com' || host.endsWith('.linkedin.com')) label = "LinkedIn";
+                    html += `<a href="${safeLink}" target="_blank" rel="noopener noreferrer nofollow" class="social-chip"><i class="ph ph-link"></i> ${label}</a>`;
                 });
                 socialsEl.innerHTML = html;
             }
