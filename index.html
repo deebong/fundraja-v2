@@ -958,7 +958,7 @@
                 document.getElementById('myProfileContainer').innerHTML = `
                     <div class="profile-header"><div class="profile-row">
                         <div style="display:flex; gap:20px; align-items:center;">
-                            <div class="profile-avatar">${userName.charAt(0)}</div>
+                            <div class="profile-avatar" id="appProfAvatar">${userName.charAt(0)}</div>
                             <div class="profile-meta"><h1>${userName}</h1><div id="appProfBadges"></div></div>
                         </div>
                         <button class="btn btn-outline" onclick="openEditProfile()"><i class="ph ph-pencil-simple"></i> Edit Profile</button>
@@ -1066,7 +1066,7 @@
 
         function renderProfileDataToContainer(data, prefix) {
             if(!data) return;
-            const avatarEl = prefix === 'prof' ? document.getElementById('profAvatar') : null;
+            const avatarEl = (prefix === 'prof' || prefix === 'appProf') ? document.getElementById(prefix === 'prof' ? 'profAvatar' : 'appProfAvatar') : null;
             if (avatarEl) {
                 if (data.photo_url) { avatarEl.style.backgroundImage = 'url("' + String(data.photo_url).replace(/"/g, '%22') + '")'; avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center'; avatarEl.textContent = ''; }
                 else { avatarEl.style.backgroundImage = 'none'; avatarEl.textContent = (data.name || 'U').charAt(0).toUpperCase(); }
@@ -1112,6 +1112,7 @@
 
         // --- DETAILS ---
         function showDetails(camp) {
+            window.detailsOpenedFromProfile = !document.getElementById('profileView').classList.contains('hidden');
             currentDetails = camp;
             const percent = Math.min(100, Math.round((camp.raised_amount / camp.target_amount) * 100));
             const colorVar = catMap[camp.category] || 'var(--primary)';
@@ -1146,6 +1147,8 @@
 
         function closeDetails() {
             document.getElementById('detailsView').classList.add('hidden');
+            if (window.detailsOpenedFromProfile) document.getElementById('profileView').classList.remove('hidden');
+            window.detailsOpenedFromProfile = false;
             history.pushState("", document.title, window.location.pathname + window.location.search);
         }
 
@@ -1487,7 +1490,7 @@
                 const step = (done, label, optional = false) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${done ? '#D1FAE5' : '#F1F5F9'};font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
                 el.innerHTML = res.donations.map(d => {
                     const campaign = allCampaigns.find(c => String(c.id) === String(d.campaignId));
-                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                    return `<details class="donation-row" style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>Donation claim</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
                             <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
