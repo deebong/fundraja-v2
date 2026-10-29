@@ -34,7 +34,7 @@ function doGet(e) {
         id: row[0], title: row[1], description: row[2], target_amount: row[3],
         raised_amount: row[4], upi_id: row[5], creator_name: row[6],
         category: row[7], end_date: row[8], rewards: row[9],
-        status: row[10], creator_id: row[11]
+        status: row[10], creator_id: row[11], image_url: row[12] || ''
       }));
       return response(campaigns);
     }
@@ -47,7 +47,7 @@ function doGet(e) {
       const user = users.find((row, i) => i > 0 && String(row[0]) === userId);
       if (user) return response({ status: 'success', data: {
         user_id: user[0], phone: user[1], name: user[4], email: user[7],
-        about: user[8], socials: user[9], photo_url: user[10]
+        about: user[8], socials: user[9], photo_url: user[10], email_verified: String(user[12] || '') === 'TRUE'
       }});
       return response({ error: 'User not found' });
     }
@@ -70,14 +70,15 @@ function doPost(e) {
 
     // --- IMAGE UPLOAD ---
     if (action === 'upload_image') {
-      if (!data.image || !data.userId) return response({ error: 'Missing image data' });
-      if (!DRIVE_FOLDER_ID) return response({ error: 'Profile image storage is not configured' });
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+      if (!data.image || !DRIVE_FOLDER_ID) return response({ error: 'Image storage is not configured or image data is missing.' });
       const parts = String(data.image).split(',');
-      if (parts.length !== 2 || !/^data:image\/(png|jpeg|webp);base64$/i.test(parts[0])) {
-        return response({ error: 'Unsupported image format' });
-      }
+      if (parts.length !== 2 || !/^data:image\/(png|jpeg|webp);base64$/i.test(parts[0])) return response({ error: 'Choose a PNG, JPG or WebP image.' });
+      if (parts[1].length > 5 * 1024 * 1024) return response({ error: 'Image is too large. Please use a smaller image (under about 3.5 MB).' });
+      const purpose = data.purpose === 'campaign' ? 'campaign' : 'profile';
       const contentType = parts[0].split(':')[1].split(';')[0];
-      const blob = Utilities.newBlob(Utilities.base64Decode(parts[1]), contentType, data.userId + '_profile');
+      const blob = Utilities.newBlob(Utilities.base64Decode(parts[1]), contentType, userId + '_' + purpose + '_' + Date.now());
       const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -153,7 +154,12 @@ function doPost(e) {
       if (rowIndex <= 1) return response({ error: 'User not found' });
       if (data.about && String(data.about).length > 500) return response({ error: 'Bio too long (max 500 chars)' });
       if (data.about !== undefined) userSheet.getRange(rowIndex, 9).setValue(data.about);
-      if (data.email !== undefined) userSheet.getRange(rowIndex, 8).setValue(data.email);
+      if (data.email !== undefined) {
+        const newEmail = String(data.email || '').trim().toLowerCase();
+        const oldEmail = String(users[rowIndex - 1][7] || '').trim().toLowerCase();
+        if (newEmail !== oldEmail) userSheet.getRange(rowIndex, 13).setValue(false);
+        userSheet.getRange(rowIndex, 8).setValue(newEmail);
+      }
       if (data.socials !== undefined) userSheet.getRange(rowIndex, 10).setValue(data.socials);
       if (data.photoUrl !== undefined) userSheet.getRange(rowIndex, 11).setValue(data.photoUrl);
       if (data.phone && data.pin) {
@@ -167,6 +173,39 @@ function doPost(e) {
       return response({ status: 'success' });
     }
 
+    if (action === 'send_email_verification') {
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+      const email = String(data.email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@gmail\.com$/i.test(email)) return response({ error: 'Enter a valid Gmail address.' });
+      const userSheet = ss.getSheetByName('Users');
+      const users = userSheet.getDataRange().getValues();
+      const rowIndex = users.findIndex((row, i) => i > 0 && String(row[0]) === userId) + 1;
+      if (rowIndex <= 1) return response({ error: 'User not found.' });
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      CacheService.getScriptCache().put('email_verify_' + userId, JSON.stringify({ email: email, code: code }), 600);
+      MailApp.sendEmail({ to: email, subject: 'Verify your FundRaja email', body: 'Your FundRaja verification code is ' + code + '. It expires in 10 minutes. If you did not request this, ignore this email.' });
+      userSheet.getRange(rowIndex, 8).setValue(email);
+      userSheet.getRange(rowIndex, 13).setValue(false);
+      return response({ status: 'success', message: 'Verification code sent. Check your inbox.' });
+    }
+    if (action === 'verify_email_code') {
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+      const stored = CacheService.getScriptCache().get('email_verify_' + userId);
+      if (!stored) return response({ error: 'Verification code expired. Request a new code.' });
+      const pending = JSON.parse(stored);
+      if (String(data.email || '').trim().toLowerCase() !== pending.email || String(data.code || '').trim() !== pending.code) return response({ error: 'Incorrect verification code.' });
+      const userSheet = ss.getSheetByName('Users');
+      const users = userSheet.getDataRange().getValues();
+      const rowIndex = users.findIndex((row, i) => i > 0 && String(row[0]) === userId) + 1;
+      if (rowIndex <= 1) return response({ error: 'User not found.' });
+      userSheet.getRange(rowIndex, 8).setValue(pending.email);
+      userSheet.getRange(rowIndex, 13).setValue(true);
+      CacheService.getScriptCache().remove('email_verify_' + userId);
+      return response({ status: 'success', message: 'Email verified.' });
+    }
+
     // --- CAMPAIGN ACTIONS ---
     if (action === 'createCampaign') {
       const userId = String(data.userId || '');
@@ -177,8 +216,9 @@ function doPost(e) {
       const key = 'last_post_' + userId;
       if (cache.get(key)) return response({ error: 'Rate limit exceeded. Please wait 10 minutes before posting again.' });
       const sheet = ss.getSheetByName('Campaigns');
+      if (sheet.getLastColumn() < 13) sheet.getRange(1, 13).setValue('image_url');
       const id = 'CMP-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase();
-      sheet.appendRow([id, data.title, data.desc, Number(data.target) || 0, 0, data.upi, data.creator, data.category, data.endDate, data.rewards, 'Pending', userId]);
+      sheet.appendRow([id, data.title, data.desc, Number(data.target) || 0, 0, data.upi, data.creator, data.category, data.endDate, data.rewards, 'Pending', userId, String(data.imageUrl || '')]);
       cache.put(key, 'true', 600);
       return response({ status: 'success', id: id });
     }
