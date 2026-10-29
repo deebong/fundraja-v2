@@ -148,6 +148,8 @@ function doPost(e) {
     }
 
     if (action === 'update_profile') {
+      const userId = String(data.userId || '');
+      if (!requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
       const userSheet = ss.getSheetByName('Users');
       const users = userSheet.getDataRange().getValues();
       const rowIndex = users.findIndex((row, i) => i > 0 && String(row[0]) === String(data.userId)) + 1;
