@@ -7,7 +7,8 @@ const GOOGLE_CLIENT_ID = '235867347996-oqv3jdtfopsbh0gdha5v726nmogoo9fg.apps.goo
 
 const DONATION_EXTRA_HEADERS = [
   'donation_id', 'payment_status', 'detected_event_id',
-  'creator_ack_at', 'creator_ack_by', 'credited_at', 'evidence_note'
+  'creator_ack_at', 'creator_ack_by', 'credited_at', 'evidence_note',
+  'donor_marked_paid_at', 'detector_reported_at', 'donor_user_id'
 ];
 const PAYMENT_EVENT_HEADERS = [
   'event_id', 'received_at', 'device_user_id', 'package_name', 'event_amount',
@@ -188,6 +189,7 @@ function doPost(e) {
     if (action === 'revoke_detector') return revokeDetector_(ss, data);
     if (action === 'get_detector_status') return getDetectorStatus_(ss, data);
     if (action === 'get_creator_donations') return getCreatorDonations_(ss, data);
+    if (action === 'get_my_donations') return getMyDonations_(ss, data);
     if (action === 'acknowledge_donation') return acknowledgeDonation_(ss, data);
 
     return response({ error: 'Unknown action' });
@@ -229,7 +231,10 @@ function submitDonation_(ss, data) {
     setByHeader_(values, map, 'transaction_ref', utr);
     setByHeader_(values, map, 'donation_id', donationId);
     setByHeader_(values, map, 'payment_status', 'AWAITING_EVIDENCE');
-    setByHeader_(values, map, 'evidence_note', 'Donor submitted UTR; awaiting detector evidence or creator review.');
+    setByHeader_(values, map, 'donor_marked_paid_at', new Date());
+    const donorUserId = String(data.userId || '');
+    if (donorUserId && requireSession_(ss, donorUserId, data.sessionToken)) setByHeader_(values, map, 'donor_user_id', donorUserId);
+    setByHeader_(values, map, 'evidence_note', 'Donator marked as paid; awaiting optional detector evidence and creator verification.');
     donations.appendRow(values);
     return response({ status: 'success', donationId: donationId, paymentStatus: 'AWAITING_EVIDENCE', message: 'Donation claim saved; awaiting creator confirmation.' });
   } finally {
@@ -315,11 +320,43 @@ function getCreatorDonations_(ss, data) {
       status: String(getByHeader_(r, map, 'payment_status') || 'LEGACY'),
       note: String(getByHeader_(r, map, 'evidence_note') || ''),
       detectedEventId: String(getByHeader_(r, map, 'detected_event_id') || ''),
-      credited: Boolean(getByHeader_(r, map, 'credited_at'))
+      credited: Boolean(getByHeader_(r, map, 'credited_at')),
+      donorMarkedPaid: Boolean(getByHeader_(r, map, 'donor_marked_paid_at')),
+      donorMarkedPaidAt: getByHeader_(r, map, 'donor_marked_paid_at') || null,
+      detectorReported: Boolean(getByHeader_(r, map, 'detector_reported_at')),
+      detectorReportedAt: getByHeader_(r, map, 'detector_reported_at') || null,
+      creatorAcknowledged: Boolean(getByHeader_(r, map, 'creator_ack_at')),
+      creatorAcknowledgedAt: getByHeader_(r, map, 'creator_ack_at') || null
     });
   }
   result.sort((a, b) => b.rowNumber - a.rowNumber);
   return response({ status: 'success', donations: result.slice(0, 100) });
+}
+
+function getMyDonations_(ss, data) {
+  const userId = String(data.userId || '');
+  if (!userId || !requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+  const sheet = ensureDonationSheet_(ss);
+  const map = headerMap_(sheet);
+  const rows = sheet.getDataRange().getValues();
+  const donations = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(getByHeader_(r, map, 'donor_user_id') || '') !== userId) continue;
+    donations.push({
+      donationId: String(getByHeader_(r, map, 'donation_id') || ''),
+      campaignId: String(getByHeader_(r, map, 'campaign_id') || ''),
+      donor: String(getByHeader_(r, map, 'donor_name') || ''),
+      amount: Number(getByHeader_(r, map, 'amount')) || 0,
+      status: String(getByHeader_(r, map, 'payment_status') || 'LEGACY'),
+      donorMarkedPaid: Boolean(getByHeader_(r, map, 'donor_marked_paid_at')),
+      detectorReported: Boolean(getByHeader_(r, map, 'detector_reported_at')),
+      creatorAcknowledged: Boolean(getByHeader_(r, map, 'creator_ack_at')),
+      credited: Boolean(getByHeader_(r, map, 'credited_at'))
+    });
+  }
+  donations.sort((a, b) => String(b.donationId).localeCompare(String(a.donationId)));
+  return response({ status: 'success', donations: donations.slice(0, 50) });
 }
 
 function acknowledgeDonation_(ss, data) {
@@ -347,7 +384,7 @@ function acknowledgeDonation_(ss, data) {
     const amount = Number(getByHeader_(row, map, 'amount'));
     if (!Number.isFinite(amount) || amount <= 0) return response({ error: 'Invalid donation amount' });
     const now = new Date();
-    donations.getRange(rowIndex, map.payment_status + 1).setValue('PAID_CREATOR_ACKNOWLEDGED');
+    donations.getRange(rowIndex, map.payment_status + 1).setValue('PAID');
     donations.getRange(rowIndex, map.creator_ack_at + 1).setValue(now);
     donations.getRange(rowIndex, map.creator_ack_by + 1).setValue(userId);
     donations.getRange(rowIndex, map.credited_at + 1).setValue(now);
@@ -355,7 +392,7 @@ function acknowledgeDonation_(ss, data) {
     const campaignRowIndex = campaignIndex + 1;
     const currentRaised = Number(campaignRows[campaignIndex][4]) || 0;
     ss.getSheetByName('Campaigns').getRange(campaignRowIndex, 5).setValue(currentRaised + amount);
-    return response({ status: 'success', paymentStatus: 'PAID_CREATOR_ACKNOWLEDGED', message: 'Creator acknowledgement recorded and campaign total updated once.' });
+    return response({ status: 'success', paymentStatus: 'PAID', message: 'Creator acknowledgement recorded and campaign total updated once.' });
   } finally {
     lock.releaseLock();
   }
@@ -437,6 +474,7 @@ function receiveDetectorEventLocked_(data) {
     if (matchedDonationId) {
       donationSheet.getRange(candidate.i, dm.payment_status + 1).setValue('DETECTED_REVIEW');
       donationSheet.getRange(candidate.i, dm.detected_event_id + 1).setValue(eventId);
+      if (dm.detector_reported_at !== undefined) donationSheet.getRange(candidate.i, dm.detector_reported_at + 1).setValue(new Date());
       donationSheet.getRange(candidate.i, dm.evidence_note + 1).setValue(note);
     }
   } else if (candidates.length > 1) {
