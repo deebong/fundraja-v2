@@ -8,7 +8,7 @@ const GOOGLE_CLIENT_ID = '235867347996-oqv3jdtfopsbh0gdha5v726nmogoo9fg.apps.goo
 const DONATION_EXTRA_HEADERS = [
   'donation_id', 'payment_status', 'detected_event_id',
   'creator_ack_at', 'creator_ack_by', 'credited_at', 'evidence_note',
-  'donor_marked_paid_at', 'detector_reported_at'
+  'donor_marked_paid_at', 'detector_reported_at', 'donor_user_id'
 ];
 const PAYMENT_EVENT_HEADERS = [
   'event_id', 'received_at', 'device_user_id', 'package_name', 'event_amount',
@@ -189,6 +189,7 @@ function doPost(e) {
     if (action === 'revoke_detector') return revokeDetector_(ss, data);
     if (action === 'get_detector_status') return getDetectorStatus_(ss, data);
     if (action === 'get_creator_donations') return getCreatorDonations_(ss, data);
+    if (action === 'get_my_donations') return getMyDonations_(ss, data);
     if (action === 'acknowledge_donation') return acknowledgeDonation_(ss, data);
 
     return response({ error: 'Unknown action' });
@@ -231,6 +232,8 @@ function submitDonation_(ss, data) {
     setByHeader_(values, map, 'donation_id', donationId);
     setByHeader_(values, map, 'payment_status', 'AWAITING_EVIDENCE');
     setByHeader_(values, map, 'donor_marked_paid_at', new Date());
+    const donorUserId = String(data.userId || '');
+    if (donorUserId && requireSession_(ss, donorUserId, data.sessionToken)) setByHeader_(values, map, 'donor_user_id', donorUserId);
     setByHeader_(values, map, 'evidence_note', 'Donator marked as paid; awaiting optional detector evidence and creator verification.');
     donations.appendRow(values);
     return response({ status: 'success', donationId: donationId, paymentStatus: 'AWAITING_EVIDENCE', message: 'Donation claim saved; awaiting creator confirmation.' });
@@ -328,6 +331,32 @@ function getCreatorDonations_(ss, data) {
   }
   result.sort((a, b) => b.rowNumber - a.rowNumber);
   return response({ status: 'success', donations: result.slice(0, 100) });
+}
+
+function getMyDonations_(ss, data) {
+  const userId = String(data.userId || '');
+  if (!userId || !requireSession_(ss, userId, data.sessionToken)) return response({ error: 'Session expired. Log in again.' });
+  const sheet = ensureDonationSheet_(ss);
+  const map = headerMap_(sheet);
+  const rows = sheet.getDataRange().getValues();
+  const donations = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(getByHeader_(r, map, 'donor_user_id') || '') !== userId) continue;
+    donations.push({
+      donationId: String(getByHeader_(r, map, 'donation_id') || ''),
+      campaignId: String(getByHeader_(r, map, 'campaign_id') || ''),
+      donor: String(getByHeader_(r, map, 'donor_name') || ''),
+      amount: Number(getByHeader_(r, map, 'amount')) || 0,
+      status: String(getByHeader_(r, map, 'payment_status') || 'LEGACY'),
+      donorMarkedPaid: Boolean(getByHeader_(r, map, 'donor_marked_paid_at')),
+      detectorReported: Boolean(getByHeader_(r, map, 'detector_reported_at')),
+      creatorAcknowledged: Boolean(getByHeader_(r, map, 'creator_ack_at')),
+      credited: Boolean(getByHeader_(r, map, 'credited_at'))
+    });
+  }
+  donations.sort((a, b) => String(b.donationId).localeCompare(String(a.donationId)));
+  return response({ status: 'success', donations: donations.slice(0, 50) });
 }
 
 function acknowledgeDonation_(ss, data) {
