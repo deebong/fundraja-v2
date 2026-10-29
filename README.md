@@ -127,23 +127,27 @@ The Android app should request only permissions necessary for notification liste
 
 ## Security model and limitations
 
-Current source-level measures include server-side session-token checks for sensitive actions, storage of session-token hashes, creator ownership checks for campaign editing and payment acknowledgement, hashed detector tokens, duplicate event/UTR checks, a script lock around selected payment writes, and server-side validation of Google sign-in token audience/email verification.
+This repository is a prototype built on static hosting, Google Apps Script, and Google Sheets. These controls reduce common risks but do not make the service equivalent to a professionally operated financial platform.
 
-This is a source review, not a formal penetration test or independent audit, and does not confirm that the deployed Apps Script version matches this repository.
+Implemented in source:
+- Sensitive actions check server-issued session tokens; only session-token hashes are stored.
+- Public profile responses omit private phone and email fields; authenticated profile retrieval requires the owner's session.
+- PINs use a per-user salt and a secret pepper stored in Apps Script Script Properties. Existing legacy salted-SHA-256 PIN hashes are upgraded after a successful login.
+- New PINs must contain 8–12 digits. Existing users may continue logging in with their existing PIN and should change it to a stronger PIN.
+- Login attempts are limited per phone identifier with persistent Script Properties counters; signup, Google sign-in, and email verification requests also have server-side throttles.
+- Detector tokens are stored as hashes, and notification events remain advisory evidence rather than proof of payment.
+- Creator ownership checks and locks protect selected campaign and payment writes.
 
-### Risks that still need attention before production
+### Remaining production blockers
 
-- **PIN strength and storage:** A short numeric PIN plus salted SHA-256 is not a modern password-hashing scheme. Use a managed identity provider or a backend with a slow password hash such as Argon2id, bcrypt, or scrypt before storing significant funds or sensitive personal data.
-- **Rate limiting:** Apps Script cache-based throttles are best-effort and may be evicted. Login, signup, email-code sending, code verification, donation submission, and image upload need durable quotas and abuse monitoring.
-- **Email verification:** Use a cryptographically secure code generator, limit attempts, invalidate codes after use, and rate-limit sending by account and destination. Email verification is not identity/KYC verification.
-- **Apps Script deployment:** Restrict editor access, use a dedicated owner account, periodically review OAuth scopes and deployments, and avoid granting broad Drive access beyond what the app requires.
-- **Google Sheets permissions:** Only the deployment owner and trusted administrators should have spreadsheet access. Sheets are not a robust transactional database or immutable audit log.
-- **Media exposure:** Public image links are visible to anyone with the link. Do not upload sensitive documents or private photos. Consider image inspection and quotas.
-- **Social links:** Only HTTP(S) URLs should be rendered as external links; new tabs should use noopener/noreferrer.
-- **Browser security headers:** GitHub Pages does not let this repository configure every HTTP response header. Review the Content Security Policy and hosting headers; avoid unsafe script capabilities and move toward nonce/hash-based scripts where feasible.
-- **Operational monitoring:** Add alerts for repeated failures, suspicious pairing activity, unexpected image uploads, and unusual donation-claim volume.
-- **Privacy and legal requirements:** Publish a privacy notice and retention policy, minimize personal data, and obtain consent before notification text is sent to the backend. Assess applicable Indian data-protection, consumer-protection, tax, and fundraising requirements before public launch.
-- **No bank verification:** OpenUPI Watch is notification-based. Never advertise it as automatic bank verification or allow its event alone to credit donations.
+- **PIN hashing:** HMAC-SHA-256 with a secret pepper is stronger than an unpeppered fast hash, but it is not a memory-hard password hash. Numeric PINs remain low entropy. For accounts holding sensitive information or supporting real-money workflows, migrate to a managed identity provider or a server capable of Argon2id, scrypt, or bcrypt, and require stronger credentials.
+- **Rate-limit scale and abuse resistance:** Script Properties quotas and Apps Script execution limits make these controls a baseline, not an enterprise-grade abuse-control system. Use an external API gateway/WAF and durable datastore-backed throttling for a production financial service. Apps Script does not reliably expose client IP addresses to this application.
+- **Verification codes:** Email codes still need durable attempt counting, strict single-use semantics, and monitoring. Cache-backed verification state can be evicted.
+- **Operational security:** Limit Apps Script editor access, review deployment permissions and OAuth scopes, protect the spreadsheet, rotate secrets carefully, and configure monitoring and incident response.
+- **Data and payments:** Google Sheets is not a transactional financial ledger. Add independent reconciliation, immutable audit logs, backups, privacy/retention controls, and formal payment-provider integrations before handling material funds.
+- **Security assurance:** No independent penetration test, full threat model, or live Apps Script deployment test has been performed. GitHub Pages deployment does not deploy `backend.gs`; the Apps Script owner must copy the updated file into Apps Script and deploy a new version before the backend changes take effect.
+
+Do not describe this repository as production-ready for regulated or high-value financial activity until the remaining blockers are addressed and independently tested.
 
 ## Recommended production upgrades
 
