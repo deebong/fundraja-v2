@@ -1724,6 +1724,7 @@
             const phone = document.getElementById('sPhone').value;
             const pin = document.getElementById('sPin').value;
             if(!name || !phone || !pin) return showNotice('Fill all fields');
+            if(!/^\\d{8,12}$/.test(pin)) return showNotice('Use an 8–12 digit PIN.');
             
             const btn = document.querySelector('#signupModal .btn-primary');
             btn.innerText="Creating...";
