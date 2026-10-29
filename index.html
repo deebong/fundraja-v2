@@ -212,6 +212,14 @@
         .profile-avatar { width: 90px; height: 90px; min-width: 90px; min-height: 90px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 700; overflow: hidden; border: 4px solid var(--primary-light); }
         .profile-meta h1 { margin: 0 0 4px 0; font-size: 1.8rem; font-weight: 800; }
         .profile-meta p { color: var(--text-gray); margin: 0; font-size: 1rem; }
+        details.donation-row > summary { list-style:none; }
+        details.donation-row > summary::-webkit-details-marker { display:none; }
+        details.donation-row > summary i { transition:transform .16s ease; }
+        details.donation-row[open] > summary i { transform:rotate(180deg); }
+        @media (max-width: 640px) {
+            details.donation-row > summary { align-items:flex-start !important; }
+            details.donation-row > summary > span:last-child { white-space:nowrap; }
+        }
         .verification-badge { display: inline-flex; align-items: center; gap: 6px; background: #ECFDF5; color: #059669; padding: 6px 12px; border-radius: 100px; font-size: 0.85rem; margin-top: 12px; font-weight: 700; border: 1px solid #D1FAE5; }
         .profile-stats-row { display: flex; gap: 20px; margin-bottom: 30px; }
         .stat-card { background: white; padding: 24px; border-radius: 16px; border: 1px solid var(--border); flex: 1; box-shadow: var(--shadow); text-align: center; }
@@ -629,7 +637,7 @@
                 <h2 style="text-align:center; margin-bottom:10px;">Start Fundraising</h2>
                 <input type="text" id="cHp" style="display:none"> <div class="form-group"><label class="form-label">Category</label><select id="cCat" class="form-input"><option>Medical</option><option>Education</option><option>Startups</option><option>Creative</option><option>Sports</option><option>Pets</option><option>Emergency</option></select></div>
                 <div class="form-group"><label class="form-label">Title</label><input type="text" id="cTitle" class="form-input" maxlength="100"></div>
-                <div class="form-group"><label class="form-label">Story</label><textarea id="cDesc" class="form-input" rows="3"></textarea></div>
+                <div class="form-group"><label class="form-label">Story</label><textarea id="cDesc" class="form-input" rows="3"></textarea></div>\n                <div class="form-group"><label class="form-label">Campaign image (Optional)</label><input type="file" id="cImage" class="form-input" accept="image/png,image/jpeg,image/webp"><small style="color:var(--text-gray);">PNG, JPG or WebP. Use a small image.</small></div>
                 <div style="display:flex; gap:12px;">
                     <div class="form-group" style="flex:1"><label class="form-label">Target (₹)</label><input type="number" id="cTarget" class="form-input"></div>
                     <div class="form-group" style="flex:1"><label class="form-label">End Date</label><input type="date" id="cDate" class="form-input"></div>
@@ -648,7 +656,12 @@
             <div class="modal-scroll-area">
                 <h2 style="text-align:center; margin-bottom:10px;">Edit Profile</h2>
                 
-                <div class="form-group"><label class="form-label">Email (Optional)</label><input type="email" id="eEmail" class="form-input"></div>
+                <div class="form-group">
+                    <label class="form-label">Gmail (Optional)</label><input type="email" id="eEmail" class="form-input" placeholder="you@gmail.com">
+                    <div id="emailVerificationStatus" style="font-size:.85rem;color:var(--text-gray);margin-top:6px;">Email is not verified.</div>
+                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn btn-outline" type="button" onclick="sendEmailVerificationCode()">Send verification code</button><input id="eEmailCode" class="form-input" inputmode="numeric" maxlength="6" placeholder="6-digit code" style="max-width:150px;"><button class="btn btn-outline" type="button" onclick="verifyEmailCode()">Verify</button></div>
+                </div>
+                <div class="form-group"><label class="form-label">Profile photo</label><input type="file" id="eProfilePhoto" class="form-input" accept="image/png,image/jpeg,image/webp"><small style="color:var(--text-gray);">PNG, JPG or WebP. Use a small image.</small></div>
                 <div class="form-group"><label class="form-label">About Me</label><textarea id="eAbout" class="form-input" rows="3"></textarea></div>
                 
                 <label class="form-label" style="margin-top:10px;">Social Links</label>
@@ -676,7 +689,7 @@
                 
                 <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
                     <div id="qrContainer" style="background:white; padding:10px; border:1px solid var(--border); border-radius:12px; display:inline-block;"><img id="qrImage" src="" width="160" height="160" style="display:block;"></div>
-                    <input type="number" id="dAmount" value="500" class="form-input" style="text-align:center; font-size:1.5rem; width:160px; font-weight:700;" onchange="updateQR()">
+                    <input type="number" id="dAmount" value="" class="form-input" style="text-align:center; font-size:1.5rem; width:160px; font-weight:700;" onchange="updateQR()">
                 </div>
                 
                 <a id="upiLink" href="#" class="btn btn-primary" style="width:100%; display:none; margin-top:10px;">Open Payment App</a>
@@ -836,8 +849,8 @@
                 div.onclick = () => showDetails(camp);
                 
                 div.innerHTML = `
-                    <div class="c-img" style="background:${colorVar}">
-                        ${camp.title ? escapeHtml(camp.title.substring(0,2).toUpperCase()) : '??'}
+                    <div class="c-img" style="background:${colorVar};${camp.image_url ? 'background-image:url(' + String(camp.image_url).replace(/'/g, '%27') + ');background-size:cover;background-position:center;' : ''}">
+                        ${camp.image_url ? '' : (camp.title ? escapeHtml(camp.title.substring(0,2).toUpperCase()) : '??')}
                         ${statusBadge}
                     </div>
                     <div class="c-body">
@@ -945,7 +958,7 @@
                 document.getElementById('myProfileContainer').innerHTML = `
                     <div class="profile-header"><div class="profile-row">
                         <div style="display:flex; gap:20px; align-items:center;">
-                            <div class="profile-avatar">${userName.charAt(0)}</div>
+                            <div class="profile-avatar" id="appProfAvatar">${userName.charAt(0)}</div>
                             <div class="profile-meta"><h1>${userName}</h1><div id="appProfBadges"></div></div>
                         </div>
                         <button class="btn btn-outline" onclick="openEditProfile()"><i class="ph ph-pencil-simple"></i> Edit Profile</button>
@@ -977,14 +990,24 @@
                             <summary style="cursor:pointer;font-weight:700;">USB installation instructions (requires a computer)</summary>
                             <ol style="padding-left:22px;margin-top:10px;color:var(--text-gray);font-size:.92rem;display:grid;gap:8px;">
                                 <li>Download the official OpenUPI Watch APK to your computer when the download becomes available.</li>
-                                <li>Install Android Platform Tools (ADB) from Google's official Android developer website.</li>
+                                <li>Install <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener noreferrer">Android SDK Platform-Tools (ADB) from Google</a>.</li>
                                 <li>On your phone, open Settings → About phone and tap Build number seven times to enable Developer options.</li>
                                 <li>Open Developer options and enable USB debugging. Connect the phone to your own trusted computer using a data-capable USB cable.</li>
                                 <li>Approve the USB debugging prompt on your phone. In the computer terminal, run <code>adb devices</code> and confirm the phone is listed as <code>device</code>.</li>
-                                <li>In the folder containing the APK, run <code>adb install -r openupi-watch.apk</code>.</li>
+                                <li>In the folder containing the APK, run the install command below.</li>
                                 <li>If Android or Play Protect blocks the installation, do not disable protection to force it. Stop and use an approved distribution method.</li>
                                 <li>After installation, disable USB debugging and revoke debugging authorisations if appropriate.</li>
                             </ol>
+                            <div style="display:grid;gap:10px;margin-top:12px;">
+                                <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F1F5F9;padding:8px 10px;"><strong style="font-size:.88rem;">Check connected phone</strong><button class="btn btn-outline" type="button" style="padding:5px 10px;font-size:.82rem;" onclick="copyCommand('adb devices',this)">Copy command</button></div>
+                                    <code style="display:block;padding:12px;background:#0F172A;color:#E2E8F0;white-space:pre-wrap;overflow-wrap:anywhere;">adb devices</code>
+                                </div>
+                                <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F1F5F9;padding:8px 10px;"><strong style="font-size:.88rem;">Install / update APK</strong><button class="btn btn-outline" type="button" style="padding:5px 10px;font-size:.82rem;" onclick="copyCommand('adb install -r openupi-watch.apk',this)">Copy command</button></div>
+                                    <code style="display:block;padding:12px;background:#0F172A;color:#E2E8F0;white-space:pre-wrap;overflow-wrap:anywhere;">adb install -r openupi-watch.apk</code>
+                                </div>
+                            </div>
                             <p style="margin-top:10px;color:var(--text-gray);font-size:.88rem;">Most creators will need a simpler direct phone download. This temporary guide is for testing only; the APK download will be enabled once a suitable distribution link is published.</p>
                         </details>
                     </div>
@@ -1020,6 +1043,16 @@
                 document.getElementById('profAbout').innerText = "Public Profile";
                 document.getElementById('profBadges').innerHTML = '';
                 document.getElementById('profSocials').innerHTML = '';
+                const creatorRecord = list.find(c => c.creator_id);
+                if (creatorRecord) {
+                    fetch(`${APPS_SCRIPT_URL}?op=getProfile&uid=${encodeURIComponent(creatorRecord.creator_id)}`)
+                        .then(r => r.json()).then(json => {
+                            if (json.status === 'success' && json.data) {
+                                renderProfileDataToContainer(json.data, 'prof');
+                                document.getElementById('profPhone').innerText = json.data.phone ? 'Creator' : '@User';
+                            }
+                        }).catch(() => {});
+                }
             }
         }
 
@@ -1033,6 +1066,11 @@
 
         function renderProfileDataToContainer(data, prefix) {
             if(!data) return;
+            const avatarEl = (prefix === 'prof' || prefix === 'appProf') ? document.getElementById(prefix === 'prof' ? 'profAvatar' : 'appProfAvatar') : null;
+            if (avatarEl) {
+                if (data.photo_url) { avatarEl.style.backgroundImage = 'url("' + String(data.photo_url).replace(/"/g, '%22') + '")'; avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center'; avatarEl.textContent = ''; }
+                else { avatarEl.style.backgroundImage = 'none'; avatarEl.textContent = (data.name || 'U').charAt(0).toUpperCase(); }
+            }
             const aboutEl = document.getElementById(prefix + 'About');
             const badgesEl = document.getElementById(prefix + 'Badges');
             const socialsEl = document.getElementById(prefix + 'Socials');
@@ -1040,7 +1078,7 @@
             if(aboutEl) aboutEl.innerText = data.about || 'No bio added.';
             
             let badges = '';
-            if(data.email) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Google</span>`;
+            if(data.email && data.email_verified) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Email verified</span>`;
             if(data.phone) badges += `<span class="verification-badge"><i class="ph ph-check-circle"></i> Phone</span>`;
             if(badgesEl) badgesEl.innerHTML = badges;
 
@@ -1074,12 +1112,16 @@
 
         // --- DETAILS ---
         function showDetails(camp) {
+            window.detailsOpenedFromProfile = !document.getElementById('profileView').classList.contains('hidden');
             currentDetails = camp;
             const percent = Math.min(100, Math.round((camp.raised_amount / camp.target_amount) * 100));
             const colorVar = catMap[camp.category] || 'var(--primary)';
 
             document.getElementById('detHero').style.background = colorVar;
-            document.getElementById('detHero').innerText = camp.title.substring(0,2).toUpperCase();
+            document.getElementById('detHero').style.backgroundImage = camp.image_url ? 'url("' + String(camp.image_url).replace(/"/g, '%22') + '")' : 'none';
+            document.getElementById('detHero').style.backgroundSize = 'cover';
+            document.getElementById('detHero').style.backgroundPosition = 'center';
+            document.getElementById('detHero').innerText = camp.image_url ? '' : camp.title.substring(0,2).toUpperCase();
             document.getElementById('detBadge').innerText = camp.category;
             document.getElementById('detBadge').style.background = colorVar;
             document.getElementById('detBadge').style.color = 'white';
@@ -1098,13 +1140,32 @@
             if(camp.end_date) { const d = new Date(camp.end_date); if(!isNaN(d)) dateStr = d.toDateString(); }
             document.getElementById('detEnd').innerText = dateStr;
 
+            document.getElementById('profileView').classList.add('hidden');
             document.getElementById('detailsView').classList.remove('hidden');
             window.location.hash = camp.id;
         }
 
         function closeDetails() {
             document.getElementById('detailsView').classList.add('hidden');
+            if (window.detailsOpenedFromProfile) document.getElementById('profileView').classList.remove('hidden');
+            window.detailsOpenedFromProfile = false;
             history.pushState("", document.title, window.location.pathname + window.location.search);
+        }
+
+        async function copyCommand(command, button) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(command);
+                else {
+                    const field = document.createElement('textarea');
+                    field.value = command;
+                    field.style.position = 'fixed'; field.style.opacity = '0';
+                    document.body.appendChild(field); field.select();
+                    const ok = document.execCommand('copy'); field.remove();
+                    if (!ok) throw new Error('Copy unavailable');
+                }
+                const previous = button.innerText; button.innerText = 'Copied';
+                setTimeout(() => button.innerText = previous, 1400);
+            } catch (e) { alert('Could not copy automatically. Select and copy the command manually.'); }
         }
 
         // --- MODAL UTILS ---
@@ -1132,15 +1193,19 @@
             document.getElementById('captchaQ').innerText = `${n1} + ${n2} = ?`;
         }
 
-        function submitCampaign() {
+        async function submitCampaign() {
             if(parseInt(document.getElementById('cCaptcha').value) !== captchaAnswer) return alert('Math Check Failed');
             if(document.getElementById('cHp').value) return; 
             
             const btn = document.querySelector('#createModal .btn-primary');
             btn.innerText = "Launching...";
             
+            let imageUrl = '';
+            try { imageUrl = await uploadImageFile('cImage', 'campaign'); }
+            catch (e) { btn.innerText = 'Launch Campaign'; alert(e.message || 'Could not upload campaign image.'); return; }
             const data = {
                 action: 'createCampaign',
+                imageUrl:imageUrl,
                 category: document.getElementById('cCat').value,
                 title: document.getElementById('cTitle').value,
                 desc: document.getElementById('cDesc').value,
@@ -1161,17 +1226,75 @@
             });
         }
 
+        function readImageAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) return resolve('');
+                if (!/^image\/(png|jpeg|webp)$/i.test(file.type)) return reject(new Error('Choose a PNG, JPG or WebP image.'));
+                if (file.size > 3 * 1024 * 1024) return reject(new Error('Please choose an image under 3 MB.'));
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Could not read the selected image.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadImageFile(inputId, purpose) {
+            const input = document.getElementById(inputId);
+            if (!input || !input.files || !input.files[0]) return '';
+            const image = await readImageAsDataUrl(input.files[0]);
+            const result = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                action:'upload_image', userId:session.userId, sessionToken:session.sessionToken, purpose:purpose, image:image
+            })}).then(r=>r.json());
+            if (result.status !== 'success' || !result.url) throw new Error(result.error || 'Image upload failed.');
+            return result.url;
+        }
+
+        async function sendEmailVerificationCode() {
+            const email = document.getElementById('eEmail').value.trim().toLowerCase();
+            const status = document.getElementById('emailVerificationStatus');
+            if (!/^[^\s@]+@gmail\.com$/i.test(email)) { alert('Enter a valid Gmail address first.'); return; }
+            status.innerText = 'Sending verification code…';
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'send_email_verification', userId:session.userId, sessionToken:session.sessionToken, email:email
+                })}).then(r=>r.json());
+                status.innerText = res.message || res.error || 'Unable to send code.';
+                if (res.status !== 'success') alert(res.error || 'Unable to send verification code.');
+            } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
+        }
+
+        async function verifyEmailCode() {
+            const email = document.getElementById('eEmail').value.trim().toLowerCase();
+            const code = document.getElementById('eEmailCode').value.trim();
+            const status = document.getElementById('emailVerificationStatus');
+            if (!/^\d{6}$/.test(code)) { alert('Enter the 6-digit code sent to your Gmail.'); return; }
+            status.innerText = 'Verifying…';
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify({
+                    action:'verify_email_code', userId:session.userId, sessionToken:session.sessionToken, email:email, code:code
+                })}).then(r=>r.json());
+                status.innerText = res.message || res.error || 'Unable to verify email.';
+                if (res.status === 'success') { currentProfileData = null; await fetchProfileData(session.userId); renderProfileDataToContainer(currentProfileData, 'appProf'); }
+                else alert(res.error || 'Email verification failed.');
+            } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
+        }
+
         function openEditProfile() {
             document.getElementById('editProfileModal').style.display = 'flex';
             if(currentProfileData) {
                 document.getElementById('eAbout').value = currentProfileData.about || '';
                 document.getElementById('eEmail').value = currentProfileData.email || '';
+                document.getElementById('emailVerificationStatus').innerText = currentProfileData.email_verified ? 'Email verified' : 'Email is not verified.';
             }
         }
 
-        function handleUpdateProfile() {
+        async function handleUpdateProfile() {
+            let photoUrl = '';
+            try { photoUrl = await uploadImageFile('eProfilePhoto', 'profile'); }
+            catch (e) { alert(e.message || 'Could not upload profile photo.'); return; }
             const payload = {
-                action: 'update_profile', userId: session.userId,
+                action: 'update_profile', userId: session.userId, sessionToken: session.sessionToken,
+                photoUrl: photoUrl || undefined,
                 about: document.getElementById('eAbout').value,
                 email: document.getElementById('eEmail').value,
                 phone: document.getElementById('ePhone').value,
@@ -1194,8 +1317,15 @@
 
         function openDonateModalFromDetails() {
             if(!session) return openLogin();
+            const remainingAmount = Math.max(0, (Number(currentDetails.target_amount) || 0) - (Number(currentDetails.raised_amount) || 0));
+            if (remainingAmount <= 0) return alert('This campaign has reached its target.');
             document.getElementById('dTitle').innerText = currentDetails.title;
             document.getElementById('dName').value = session.name;
+            const target = Math.max(0, Number(currentDetails.target_amount) || 0);
+            const raised = Math.max(0, Number(currentDetails.raised_amount) || 0);
+            const remaining = Math.max(0, target - raised);
+            const suggested = Math.min(remaining, Math.max(100, Math.round((target * 0.05) / 100) * 100));
+            document.getElementById('dAmount').value = String(suggested || remaining || 100);
             document.getElementById('donateModal').style.display = 'flex';
             updateQR();
         }
@@ -1333,10 +1463,10 @@
                     const status = d.status || 'LEGACY';
                     const canAcknowledge = !d.credited && d.donationId && ['AWAITING_EVIDENCE','DETECTED_REVIEW','NEEDS_REVIEW','MATCHED_REVIEW','AMBIGUOUS','UNMATCHED','UNPARSEABLE'].includes(status);
                     const step = (done, label, optional = false) => `<div style="display:flex; align-items:center; gap:8px; margin:7px 0; color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${done ? '#D1FAE5' : '#F1F5F9'}; color:${done ? '#047857' : '#64748B'}; font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
-                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                    return `<details class="donation-row" style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>${escapeHtml(d.donor || 'Donor')}</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">UTR ${escapeHtml(d.utr || 'not provided')} · <span style="color:${d.credited ? '#047857' : '#B45309'};font-weight:700;">${d.credited ? 'PAID' : 'PENDING VERIFICATION'}</span></span></span>
-                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
+                            <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><i class="ph ph-caret-down" aria-hidden="true" style="font-size:1.1rem;color:var(--text-gray);transition:transform .15s;"></i></span>
                         </summary>
                         <div style="padding:0 0 14px;">
                             <div style="padding:10px 12px;border-radius:10px;background:#F8FAFC;">
@@ -1362,7 +1492,7 @@
                 const step = (done, label, optional = false) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;color:${done ? '#047857' : '#64748B'};"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${done ? '#D1FAE5' : '#F1F5F9'};font-weight:800;">${done ? '✓' : '○'}</span><span>${label}${optional && !done ? ' — optional' : ''}</span></div>`;
                 el.innerHTML = res.donations.map(d => {
                     const campaign = allCampaigns.find(c => String(c.id) === String(d.campaignId));
-                    return `<details style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
+                    return `<details class="donation-row" style="border:1px solid var(--border);border-radius:12px;padding:0 14px;">
                         <summary style="list-style:none;cursor:pointer;padding:12px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                             <span><strong>Donation claim</strong><span style="display:block;color:var(--text-gray);font-size:.88rem;">${d.credited ? 'PAID' : 'PENDING CREATOR VERIFICATION'}</span></span>
                             <span style="display:flex;align-items:center;gap:10px;"><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong><span aria-hidden="true">⌄</span></span>
