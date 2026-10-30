@@ -174,4 +174,4 @@ Do not describe this repository as production-ready for regulated or high-value 
 
 ## License
 
-No LICENSE file was identified in the current repository tree. Add a LICENSE file with the intended license before inviting external contributions; do not assume a license based only on an earlier README or a linked repository.
+FundRaja is released under the [MIT License](LICENSE). The license text is included in the repository root. Contributions and reuse are subject to the terms of that license.
