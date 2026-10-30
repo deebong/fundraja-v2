@@ -20,7 +20,7 @@ function getFundRajaImageFolder_() {
 
 const SHEET_ID = ''; // Keep the active spreadsheet ID here if your deployment uses a bound script.
 const DRIVE_FOLDER_ID = ''; // Optional public profile-image folder ID.
-const GOOGLE_CLIENT_ID = '235867347996-oqv3jdtfopsbh0gdha5v726nmogoo9fg.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '409556444314-v2k6g8289j6gqhvj090jktouk7j7hcre.apps.googleusercontent.com';
 
 const DONATION_EXTRA_HEADERS = [
   'donation_id', 'payment_status', 'detected_event_id',
