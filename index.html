@@ -1456,7 +1456,7 @@
                 const value = raw.trim();
                 if (!value) return;
                 try {
-                    const host = new URL(value).hostname.toLowerCase().replace(/^www\\./, '');
+                    const host = new URL(value).hostname.toLowerCase().replace(/^www\./, '');
                     let platform = '';
                     if (host === 'facebook.com' || host.endsWith('.facebook.com')) platform = 'facebook';
                     else if (host === 'twitter.com' || host.endsWith('.twitter.com')) platform = 'twitter';
