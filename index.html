@@ -723,9 +723,10 @@
                 <div class="social-input-row"><i class="ph ph-linkedin-logo"></i><input type="text" id="eLi" class="form-input" placeholder="LinkedIn URL"></div>
                 
                 <hr style="margin:10px 0; border:0; border-top:1px solid #E2E8F0;">
-                <label class="form-label">Link Credentials (Optional)</label>
-                <div class="form-group"><input type="tel" id="ePhone" class="form-input" placeholder="10-digit Phone" maxlength="10"></div>
-                <div class="form-group"><input type="password" id="ePin" class="form-input" maxlength="12" minlength="8" placeholder="Set 8–12 digit PIN"></div>
+                <label class="form-label">Phone Login</label>
+                <div class="form-group"><input type="tel" id="ePhone" class="form-input" placeholder="10-digit Phone" maxlength="10" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')"></div>
+                <small style="display:block;color:var(--text-gray);margin:-4px 0 8px;">To add or change your phone number, enter a new 8–12 digit PIN below. Leave the PIN blank if you are not changing your phone login.</small>
+                <div class="form-group"><input type="password" id="ePin" class="form-input" maxlength="12" minlength="8" placeholder="New 8–12 digit PIN"></div>
 
                 <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="handleUpdateProfile()">Save Changes</button>
             </div>
@@ -1440,28 +1441,63 @@
             } catch(e) { status.innerText = 'Could not contact FundRaja.'; }
         }
 
-        function openEditProfile() {
-            document.getElementById('editProfileModal').style.display = 'flex';
+        function populateEditProfileFields(data) {
+            const profile = data || {};
+            document.getElementById('eAbout').value = profile.about || '';
+            document.getElementById('eEmail').value = profile.email || '';
+            document.getElementById('ePhone').value = profile.phone || '';
+            document.getElementById('ePin').value = '';
+
+            // The sheet stores social URLs as a comma-separated string. Map each URL
+            // by its hostname so missing platforms do not shift values into the wrong field.
+            const socialFields = { facebook: 'eFb', twitter: 'eTw', x: 'eTw', instagram: 'eIg', linkedin: 'eLi' };
+            ['eFb', 'eTw', 'eIg', 'eLi'].forEach(id => { document.getElementById(id).value = ''; });
+            String(profile.socials || '').split(',').forEach(raw => {
+                const value = raw.trim();
+                if (!value) return;
+                try {
+                    const host = new URL(value).hostname.toLowerCase().replace(/^www\\./, '');
+                    let platform = '';
+                    if (host === 'facebook.com' || host.endsWith('.facebook.com')) platform = 'facebook';
+                    else if (host === 'twitter.com' || host.endsWith('.twitter.com')) platform = 'twitter';
+                    else if (host === 'x.com' || host.endsWith('.x.com')) platform = 'x';
+                    else if (host === 'instagram.com' || host.endsWith('.instagram.com')) platform = 'instagram';
+                    else if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) platform = 'linkedin';
+                    const fieldId = socialFields[platform];
+                    if (fieldId && !document.getElementById(fieldId).value) document.getElementById(fieldId).value = value;
+                } catch (_) {}
+            });
+
+            document.getElementById('emailVerificationStatus').innerText = profile.email_verified ? 'Email verified' : 'Email is not verified.';
             syncEmailVerificationUI();
-            if(currentProfileData) {
-                document.getElementById('eAbout').value = currentProfileData.about || '';
-                document.getElementById('eEmail').value = currentProfileData.email || '';
-                document.getElementById('emailVerificationStatus').innerText = currentProfileData.email_verified ? 'Email verified' : 'Email is not verified.';
-                syncEmailVerificationUI();
+        }
+
+        async function openEditProfile() {
+            document.getElementById('editProfileModal').style.display = 'flex';
+            if (!currentProfileData || currentProfileData.phone === undefined) {
+                await fetchProfileData(session.userId);
             }
+            populateEditProfileFields(currentProfileData);
         }
 
         async function handleUpdateProfile() {
             let photoUrl = '';
             try { photoUrl = await uploadImageFile('eProfilePhoto', 'profile'); }
             catch (e) { showNotice(e.message || 'Could not upload profile photo.'); return; }
+            const phone = document.getElementById('ePhone').value.trim();
+            const pin = document.getElementById('ePin').value;
+            const originalPhone = String(currentProfileData && currentProfileData.phone || '').trim();
+            if (phone !== originalPhone && phone && !/^\\d{8,12}$/.test(pin)) {
+                return showNotice('To add or change your phone number, set a new 8–12 digit PIN.');
+            }
+            if (pin && !/^\\d{8,12}$/.test(pin)) return showNotice('PIN must contain 8–12 digits.');
             const payload = {
                 action: 'update_profile', userId: session.userId, sessionToken: session.sessionToken,
                 photoUrl: photoUrl || undefined,
                 about: document.getElementById('eAbout').value,
                 email: document.getElementById('eEmail').value,
-                phone: document.getElementById('ePhone').value,
-                pin: document.getElementById('ePin').value,
+                phone: phone,
+                pin: pin,
                 socials: [document.getElementById('eFb').value, document.getElementById('eTw').value, document.getElementById('eIg').value, document.getElementById('eLi').value].filter(Boolean).join(',')
             };
             const btn = document.querySelector('#editProfileModal .btn-primary');
