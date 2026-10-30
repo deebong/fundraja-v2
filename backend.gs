@@ -745,6 +745,8 @@ function requireSession_(ss, userId, token) {
 
 // PIN hashes use a script-property pepper plus a per-user salt. Existing SHA-256-only
 // hashes are upgraded after the first successful login without forcing a password reset.
+// PIN hashes use a script-property pepper plus a per-user salt. Existing SHA-256-only
+// hashes are upgraded after the first successful login without forcing a password reset.
 function hashPin(pin, salt) {
   const props = PropertiesService.getScriptProperties();
   let pepper = props.getProperty('FUNDRaja_PIN_PEPPER');
@@ -753,7 +755,50 @@ function hashPin(pin, salt) {
     props.setProperty('FUNDRaja_PIN_PEPPER', pepper);
   }
   const bytes = Utilities.computeHmacSha256Signature(String(salt) + ':' + String(pin), pepper);
-  return 'v2
+  return 'v2$' + bytes.map(b => {
+    const n = b < 0 ? b + 256 : b;
+    return ('0' + n.toString(16)).slice(-2);
+  }).join('');
+}
+
+function legacyHashPin_(pin, salt) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(pin) + String(salt));
+  return digest.map(b => {
+    const n = b < 0 ? b + 256 : b;
+    return ('0' + n.toString(16)).slice(-2);
+  }).join('');
+}
+
+function verifyAndUpgradePin_(sheet, rowIndex, pin, salt, storedHash) {
+  const stored = String(storedHash || '');
+  if (stored.startsWith('v2$')) return hashPin(pin, salt) === stored;
+  if (!stored || legacyHashPin_(pin, salt) !== stored) return false;
+  sheet.getRange(rowIndex, 3).setValue(hashPin(pin, salt));
+  return true;
+}
+
+// Persistent, script-wide rate limits. Unlike CacheService, ScriptProperties survive cache
+// eviction. Locking serializes counter updates across concurrent requests.
+function rateLimitExceeded_(key, limit, windowSeconds) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const propKey = 'RL_' + sha256_(key).slice(0, 40);
+    const now = Date.now();
+    let state = {};
+    try { state = JSON.parse(props.getProperty(propKey) || '{}'); } catch (e) {}
+    if (!state.startedAt || now - Number(state.startedAt) >= windowSeconds * 1000) {
+      state = { startedAt: now, count: 0 };
+    }
+    state.count = Number(state.count || 0) + 1;
+    props.setProperty(propKey, JSON.stringify(state));
+    return state.count > limit;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function response(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
